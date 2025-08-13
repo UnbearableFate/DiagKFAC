@@ -218,7 +218,7 @@ class DataPreparer:
         dataset_name = self.dataset_name[args.dataset.lower()]
         train_transform = self.train_transform_dict[dataset_name]
         test_transform = self.test_transform_dict[dataset_name]
-
+        print(f"Using dataset: {dataset_name}, data path: {args.data_path}")
         train_dataset = self.dataset_func[dataset_name](args.data_path, train=True, download=False, transform=train_transform)
         test_dataset = self.dataset_func[dataset_name](args.data_path, train=False, download=False, transform=test_transform)
         self.num_classes = len(train_dataset.classes)
@@ -237,6 +237,7 @@ class DataPreparer:
             shuffle=(self.train_sampler is None),
             num_workers=args.workers,
             pin_memory=True,
+            drop_last=True,
         )
         self.test_loader = DataLoader(
             test_dataset,
@@ -254,7 +255,7 @@ class DataPreparer:
 
         self.num_classes = len(dataset.classes)
         mixup_cutmix = get_mixup_cutmix(
-            mixup_alpha=args.mixup_alpha, cutmix_alpha=args.cutmix_alpha, num_classes=num_classes, use_v2=args.use_v2
+            mixup_alpha=args.mixup_alpha, cutmix_alpha=args.cutmix_alpha, num_classes=self.num_classes, use_v2=args.use_v2
         )
         if mixup_cutmix is not None:
 
@@ -271,6 +272,7 @@ class DataPreparer:
             num_workers=args.workers,
             pin_memory=True,
             collate_fn=collate_fn,
+            drop_last=True,
         )
         self.test_loader = torch.utils.data.DataLoader(
             dataset_test, batch_size=args.batch_size, sampler=self.test_sampler, num_workers=args.workers, pin_memory=True

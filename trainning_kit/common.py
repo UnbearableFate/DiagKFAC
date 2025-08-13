@@ -2,15 +2,6 @@ import os
 import datetime
 import argparse
 
-"""
-ompi_world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE', -1))
-ompi_world_rank = int(os.getenv('OMPI_COMM_WORLD_RANK', -1))
-
-from mpi4py import MPI
-if ompi_world_size == -1 or ompi_world_rank == -1:
-    ompi_world_rank = MPI.COMM_WORLD.Get_rank()
-    ompi_world_size = MPI.COMM_WORLD.Get_size()
-"""
 
 PROJECT_NAME = "FNGD"
 
@@ -22,7 +13,7 @@ PRIVATE_DATA_ROOT = { # for small datasets like cifar10
 }
 
 WORKSPACE_ROOT = {
-    'fern' : "/home/yu/workspace/+" + PROJECT_NAME,
+    'fern' : "/home/yu/workspace/" + PROJECT_NAME,
     'mac' : "/Users/unbearablefate/workspace/" + PROJECT_NAME,
     'pegasus' : "/work/NBB/yu_mingzhe/" + PROJECT_NAME,
     'miyabi' : "/work/xg24i002/x10041/" + PROJECT_NAME,
@@ -33,7 +24,7 @@ def merged_args_parser(add_help=True):
 
     # ===== 来自第一个函数的参数 =====
     parser.add_argument("--data-path", default=None, type=str, help="dataset path")
-    parser.add_argument("--model", default="resnet18", type=str, help="model name")
+    parser.add_argument("--model", default=None, type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu; default: cuda)")
     parser.add_argument("-b", "--batch-size", default=32, type=int, help="images per gpu, total batch size = NGPU x batch_size")
     parser.add_argument("--epochs", default=90, type=int, metavar="N", help="number of total epochs to run")
@@ -54,8 +45,9 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--lr-warmup-decay", default=0.01, type=float, help="learning rate warmup decay")
     parser.add_argument("--lr-step-size", default=30, type=int, help="decrease lr every step-size epochs")
     parser.add_argument("--lr-gamma", default=0.1, type=float, help="decrease lr by a factor of lr-gamma")
+    parser.add_argument("--pct-start", default=0.3, type=float, help="percentage of total steps for the warmup phase")
     parser.add_argument("--lr-min", default=0.0, type=float, help="minimum learning rate (default: 0.0)")
-    parser.add_argument("--print-freq", default=10, type=int, help="print frequency")
+    parser.add_argument("--print-freq", default=100, type=int, help="print frequency")
     parser.add_argument("--output-dir", default="./out", type=str, help="directory to save outputs")
     parser.add_argument("--resume", default="", type=str, help="path to checkpoint")
     parser.add_argument("--start-epoch", default=0, type=int, metavar="N", help="start epoch")
@@ -89,7 +81,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--checkpoint-format", default="checkpoint_{epoch}.pth.tar", help="checkpoint file format")
     parser.add_argument("--no-cuda", action="store_true", default=False, help="disable CUDA training")
     parser.add_argument("--seed", type=int, default=42, metavar="S", help="random seed (default: 42)")
-    parser.add_argument("--layers", type=int, default=34, help="number of layers in ResNet (default: 18)")  # 新增
+    parser.add_argument("--layers", type=int, default=18, help="number of layers in ResNet (default: 18)")  # 新增
     parser.add_argument("--val-batch-size", type=int, default=128, help="validation batch size (default: 128)")
     parser.add_argument("--batches-per-allreduce", type=int, default=1, help="number of local batches before allreduce")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="frequency of saving checkpoints (in epochs)")
@@ -115,7 +107,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--timestamp", type=str, default=datetime.datetime.now().strftime('%Y%m%d_%H%M'), help="experiment timestamp")
     parser.add_argument("--experiment-name", type=str, default="cifar10_resnet", help="experiment name")
     parser.add_argument("--recover", action="store_true", default=False, help="recover from checkpoint")
-    parser.add_argument("--not-kfac", action="store_true", default=False, help="disable KFAC")
+    parser.add_argument("--preconditioner", type=str, default="none",choices=["kfac", "diag_kfac"], help="use preconditioner")
     parser.add_argument("--degree-noniid", type=float, default=0, help="degree of non-iid data distribution")
     parser.add_argument(
         "--dataset",
@@ -133,17 +125,23 @@ def merged_args_parser(add_help=True):
         help="system name (default: fern)",
     )
 
+    parser.add_argument(
+        "--backpack",
+        action="store_true",
+        default=False,
+        help="use backpack for extend backpropagation",
+    )
+
     # 处理环境变量中分布式的 LOCAL_RANK（若存在）
     args = parser.parse_args()
     if "LOCAL_RANK" in os.environ:
         args.local_rank = int(os.environ["LOCAL_RANK"])
 
-    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist,minist"] and args.system in ["fern", "mac", "pegasus", "miyabi"]:
+    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist"] and args.system in ["fern", "mac", "pegasus", "miyabi"]:
         args.data_path = os.path.join(PRIVATE_DATA_ROOT[args.system], args.dataset)
         if not os.path.exists(args.data_path):
             raise ValueError(f"Dataset path {args.data_path} does not exist. Please set the correct path.")
+    
+    args.workspace_path = WORKSPACE_ROOT[args.system]
 
-    # print args
-    for key, value in vars(args).items():
-        print(f"{key}: {value}")
     return args

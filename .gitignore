@@ -8,3 +8,5 @@ out
 *.whl
 *.mypy_cache
 *.pytest_cache
+logs
+.vscode

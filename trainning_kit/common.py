@@ -81,7 +81,6 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--checkpoint-format", default="checkpoint_{epoch}.pth.tar", help="checkpoint file format")
     parser.add_argument("--no-cuda", action="store_true", default=False, help="disable CUDA training")
     parser.add_argument("--seed", type=int, default=42, metavar="S", help="random seed (default: 42)")
-    parser.add_argument("--layers", type=int, default=18, help="number of layers in ResNet (default: 18)")  # 新增
     parser.add_argument("--val-batch-size", type=int, default=128, help="validation batch size (default: 128)")
     parser.add_argument("--batches-per-allreduce", type=int, default=1, help="number of local batches before allreduce")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="frequency of saving checkpoints (in epochs)")
@@ -118,30 +117,30 @@ def merged_args_parser(add_help=True):
     )
 
     parser.add_argument(
-        "--system",
-        default="fern",
-        type=str,
-        choices=["fern","mac", "pegasus", "miyabi"],
-        help="system name (default: fern)",
-    )
-
-    parser.add_argument(
         "--backpack",
         action="store_true",
         default=False,
         help="use backpack for extend backpropagation",
     )
+    
+    current_system = None
+    for system, workspace_root in WORKSPACE_ROOT.items():
+        if os.path.exists(workspace_root):
+            current_system = system
+            break
+    if current_system is None:
+        raise ValueError("No valid system found in PRIVATE_DATA_ROOT. Please set the correct paths.")
 
     # 处理环境变量中分布式的 LOCAL_RANK（若存在）
     args = parser.parse_args()
     if "LOCAL_RANK" in os.environ:
         args.local_rank = int(os.environ["LOCAL_RANK"])
 
-    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist"] and args.system in ["fern", "mac", "pegasus", "miyabi"]:
-        args.data_path = os.path.join(PRIVATE_DATA_ROOT[args.system], args.dataset)
+    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist","imagenet1k"] and current_system in ["fern", "mac", "pegasus", "miyabi"]:
+        args.data_path = os.path.join(PRIVATE_DATA_ROOT[current_system], args.dataset)
         if not os.path.exists(args.data_path):
             raise ValueError(f"Dataset path {args.data_path} does not exist. Please set the correct path.")
-    
-    args.workspace_path = WORKSPACE_ROOT[args.system]
+
+    args.workspace_path = WORKSPACE_ROOT[current_system]
 
     return args

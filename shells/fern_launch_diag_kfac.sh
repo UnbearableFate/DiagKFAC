@@ -15,7 +15,6 @@ mpirun --host fern02,fern01 \
  --timestamp="$current_time" \
  --experiment-name="diag_kfac_test_ddp" \
  --model='resnet18Cifar' \
- --layers=18 \
  --dataset='cifar10' \
  --epochs 60 \
  --batch-size 256 \

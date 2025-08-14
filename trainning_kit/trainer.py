@@ -6,7 +6,7 @@ import time
 from typing import Callable
 import warnings
 
-from costom_modules import create_model
+from costom_modules.image_classification import get_network as create_image_classification_model
 import kfac
 from optimizers.AdaFisher import AdaFisher
 from trainning_kit import presets
@@ -20,8 +20,6 @@ from torchvision.transforms.functional import InterpolationMode
 from .transforms import get_mixup_cutmix
 from .data_preparation import DataPreparer
 import torch.distributed as dist
-from costom_modules.cnn import ResNetForCIFAR10, MLP, SimpleCNN
-from costom_modules.kan import KAN
 from torch.utils.tensorboard import SummaryWriter
 from .common import WORKSPACE_ROOT
 from kfac.dia_kfac.preconditioner import DiagKFACPreconditioner
@@ -56,12 +54,8 @@ class Trainer:
 
         self.data_manager = DataPreparer(args,self.world_size,self.rank)
 
-        print("Creating model")
         if model is None:
-            if args.model in torchvision.models.list_models():
-                self.model = torchvision.models.get_model(args.model, weights=args.weights, num_classes=self.data_manager.num_classes)
-            else:
-                self.model = create_model(args)
+            self.model = create_image_classification_model(args.model, num_classes=self.data_manager.num_classes)
         else:
             self.model = model
         
@@ -152,12 +146,16 @@ class Trainer:
 
         for line in config_lines:
             print(line)
-        # 写入到log_dir下的config.txt
-        config_path = os.path.join(log_dir, "config.txt")
+        # 写入到log_dir下的log.txt
+        config_path = os.path.join(log_dir, "log.txt")
         with open(config_path, "w") as f:
             for line in config_lines:
                 f.write(line + "\n")
+            f.write("\n==== Arguments ====\n")
+            for arg in vars(args):
+                f.write(f"{arg}: {getattr(args, arg)}\n")
 
+        self.config_path = config_path
         return summary_writer
 
     def init_optimizer(self, args):
@@ -333,7 +331,7 @@ class Trainer:
         optimizer = self.optimizer
         model_ema = self.model_ema
         scaler = self.scaler
-        print("Start training")
+        print(f"Start training at {datetime.datetime.now()} at rank {dist.get_rank()}")
         start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
@@ -366,10 +364,10 @@ class Trainer:
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print(f"Training time {total_time_str}")
+        print(f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {dist.get_rank()}")
         if dist.is_initialized():
             dist.destroy_process_group()
-    
+
     def test_only(self):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
@@ -421,14 +419,22 @@ class Trainer:
             )
 
         metric_logger.synchronize_between_processes()
-        print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
+        
         if self.summary_writer is not None:
             self.summary_writer.add_scalar(
-                f"Accuracy/acc1{log_suffix}", metric_logger.acc1.global_avg, epoch
+                f"Test/acc1{log_suffix}_vs_epoch", metric_logger.acc1.global_avg, epoch
             )
             self.summary_writer.add_scalar(
-                f"AccuracyVsTime/acc1{log_suffix}", metric_logger.acc1.global_avg, self.train_total_time
-        )
+                f"Test/acc5{log_suffix}_vs_epoch", metric_logger.acc5.global_avg, epoch
+            )
+            self.summary_writer.add_scalar(
+                f"Test/acc1{log_suffix}_vs_time", metric_logger.acc1.global_avg, self.train_total_time
+            )
+            self.summary_writer.add_scalar(
+                f"Test/acc5{log_suffix}_vs_time", metric_logger.acc5.global_avg, self.train_total_time
+            )
+            print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
+        
         return metric_logger.acc1.global_avg
     
     def train_one_epoch(self,epoch):
@@ -586,3 +592,6 @@ class Trainer:
                     self.summary_writer.add_scalar(f"Train/bn0_running_var", rv, epoch)
                 except Exception:
                     pass
+
+            self.summary_writer.add_scalar(f"Train/max_allocate_memory", torch.cuda.max_memory_allocated() / 1024.0 / 1024.0, epoch)
+            self.summary_writer.add_scalar(f"Train/img_per_second", metric_logger.meters["img/s"].global_avg, epoch)

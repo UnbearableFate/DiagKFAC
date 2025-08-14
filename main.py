@@ -18,7 +18,7 @@ print(f"OMPI World Size: {ompi_world_size}, OMPI World Rank: {ompi_world_rank}")
 dist.init_process_group(backend='nccl',timeout=timeout ,world_size=ompi_world_size, rank=ompi_world_rank)
 print("Distributed process group initialized.")
 print(f"World size: {dist.get_world_size()}, Rank: {dist.get_rank()}")
-if dist.get_world_size() > 1:
+if dist.get_rank() == 0:
     import logging
     logging.basicConfig(level=logging.NOTSET, format='%(asctime)s - %(levelname)s - %(message)s')
 

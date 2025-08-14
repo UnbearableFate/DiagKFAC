@@ -14,10 +14,10 @@ mpirun --host fern02,fern01 \
  main.py \
  --timestamp="$current_time" \
  --experiment-name="diag_kfac_test_ddp" \
- --model='resnet' \
+ --model='resnet18Cifar' \
  --layers=18 \
  --dataset='cifar10' \
- --epochs 50 \
+ --epochs 60 \
  --batch-size 256 \
  --opt adamw \
  --lr 0.001 \
@@ -40,7 +40,7 @@ mpirun --host fern02,fern01 \
  --kfac-factor-update-steps 10 \
  --kfac-inv-update-steps 100 \
  --kfac-damping 0.003 \
- --kfac-kl-clip 0.0005 \
+ --kfac-kl-clip 0.001 \
  --amp
  #--model-ema \
  #--ra-sampler \

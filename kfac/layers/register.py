@@ -7,6 +7,7 @@ from typing import Any
 
 import torch
 
+from kfac.dia_kfac.norm_modules import BN2dModuleHelper, LayerNormModuleHelper
 from kfac.layers.base import KFACBaseLayer
 from kfac.layers.modules import Conv2dModuleHelper
 from kfac.layers.modules import LinearModuleHelper
@@ -50,8 +51,11 @@ def get_module_helper(module: torch.nn.Module) -> ModuleHelper | None:
         return LinearModuleHelper(module)
     elif isinstance(module, CONV2D_TYPES):
         return Conv2dModuleHelper(module)  # type: ignore
-    else:
-        return None
+    elif isinstance(module, torch.nn.BatchNorm2d):
+        return BN2dModuleHelper(module)
+    elif isinstance(module, torch.nn.LayerNorm):
+        return LayerNormModuleHelper(module)
+    return None
 
 
 def any_match(query: str, patterns: list[str]) -> bool:
@@ -96,7 +100,7 @@ def register_modules(
             if module_helper is None:
                 continue
 
-            kfac_layer = kfac_layer_type(module_helper, **layer_kwargs)
+            kfac_layer = kfac_layer_type(module_helper,name = name, **layer_kwargs)
 
             # get_flattened_modules() should never give us modules with the
             # same name

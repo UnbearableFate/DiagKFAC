@@ -4,7 +4,7 @@ import trainning_kit.common as common
 from trainning_kit.trainer import Trainer
 import torch.distributed as dist
 args = common.merged_args_parser()
-timeout = datetime.timedelta(seconds=10)
+timeout = datetime.timedelta(seconds=20)
 
 ompi_world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE', -1))
 ompi_world_rank = int(os.getenv('OMPI_COMM_WORLD_RANK', -1))

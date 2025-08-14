@@ -24,6 +24,7 @@ class KFACEigenLayer(KFACBaseLayer):
         self,
         module: ModuleHelper,
         *,
+        name: str,
         tdc: TorchDistributedCommunicator,
         allreduce_method: AllreduceMethod = AllreduceMethod.ALLREDUCE,
         factor_dtype: torch.dtype | None = None,
@@ -82,6 +83,8 @@ class KFACEigenLayer(KFACBaseLayer):
         # Outer product + damping of eigenvalues
         # Only used if self.prediv_eigenvalues
         self._dgda: torch.Tensor | FutureType | None = None
+
+        self.name = name
 
     @property
     def qa(self) -> torch.Tensor | None:
@@ -307,9 +310,25 @@ class KFACEigenLayer(KFACBaseLayer):
             )
 
         if self.symmetric_factors:
-            self.da, self.qa = torch.linalg.eigh(
-                self.a_factor.to(torch.float32),
-            )
+            try:
+                self.da, self.qa = torch.linalg.eigh(
+                    self.a_factor.to(torch.float32),
+                )
+            except Exception as e:
+                print(f"eigen a symmetric decomposition error: {e} at {self.name}, a shape{self.a_factor.shape} at rank {get_rank()}")
+                if torch.isnan(self.a_factor).any() or torch.isinf(self.a_factor).any():
+                    print(f"nan or inf in a_factor at {self.name} try to fix")
+                    self.a_factor.nan_to_num_()
+                try :
+                    print(f"gpu memory usage at {self.name} before fix: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
+                    print(f"try to fix a_factor at {self.name}")
+                    epsilon = 0.007
+                    matrix = self.a_factor + epsilon * torch.eye(self.a_factor.size(0), dtype=torch.float32, device=self.a_factor.device)
+                    self.da, self.qa = torch.linalg.eigh(
+                        (matrix).to(torch.float32),
+                    )
+                except Exception as e:
+                    print(f"eigen a decomposition error again: {e} at {self.name} ,pass")
         else:
             da, qa = torch.linalg.eig(
                 self.a_factor.to(torch.float32),

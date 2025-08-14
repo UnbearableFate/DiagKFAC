@@ -3,7 +3,7 @@ import datetime
 import argparse
 
 
-PROJECT_NAME = "FNGD"
+PROJECT_NAME = "DiagKFAC"
 
 PRIVATE_DATA_ROOT = { # for small datasets like cifar10
     'fern' : "/home/yu/data",

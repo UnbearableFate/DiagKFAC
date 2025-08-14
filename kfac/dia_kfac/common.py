@@ -17,10 +17,10 @@ def print_once(message: str) -> None:
 
 
 class SplitEnd(Enum):
-    IN = 0
-    OUT = 1
-    BOTH = 2
-    NONE = 3
+    IN = 1
+    OUT = 2
+    BOTH = 3
+    NONE = 0
 
 
 

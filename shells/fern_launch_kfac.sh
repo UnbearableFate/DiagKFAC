@@ -10,8 +10,8 @@ mpirun --host fern02,fern01 \
  /home/yu/miniconda3/envs/py313/bin/python \
  main.py \
  --timestamp="$current_time" \
- --experiment-name="kfac_test_ddp" \
- --model='resnet' \
+ --experiment-name="kfac_test_norm" \
+ --model='resnet18Cifar' \
  --layers=18 \
  --dataset='cifar10' \
  --epochs 50 \
@@ -36,9 +36,10 @@ mpirun --host fern02,fern01 \
  --preconditioner kfac \
  --kfac-factor-update-steps 10 \
  --kfac-inv-update-steps 100 \
- --kfac-damping 0.003 \
+ --kfac-damping 0.007 \
  --kfac-kl-clip 0.0005 \
- --amp
+ --amp \
+ --seed 17 \
  #--model-ema \
  #--ra-sampler \
  #--ra-reps 4 \

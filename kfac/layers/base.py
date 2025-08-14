@@ -364,7 +364,7 @@ class KFACBaseLayer:
         g = grad_output[0].to(self.factor_dtype)
         if self.grad_scaler is not None:
             g = g / self.grad_scaler()
-        g = self.module.get_g_factor(g)
+        g = self.module.get_g_factor(g) # BN LN的引入让这里可能产生 in-place错误
         if self._g_batch is None:
             self._g_batch = g
             self._g_count = 1

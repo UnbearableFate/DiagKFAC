@@ -51,22 +51,44 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             prediv_eigenvalues=False,
             tdc=tdc,
             allreduce_method=allreduce_method,
+            name=name,
         )
+
         self.sub_layers : List[DiaEigenLayer] = []
         self.split_in = split_end in [SplitEnd.IN, SplitEnd.BOTH]
         self.split_out = split_end in [SplitEnd.OUT, SplitEnd.BOTH]
+        
+        if self.split_in and self.module.a_factor_shape[0] // split_num < 8:
+            print(f"Disabling split_in at layer {self.name} because a factor shape {self.module.a_factor_shape[0]} // {split_num} < 8")
+            self.split_in = False
+        if self.split_out and self.module.g_factor_shape[0] // split_num < 8:
+            print(f"Disabling split_out at layer {self.name} because g factor shape {self.module.g_factor_shape[0]} // {split_num} < 8")
+            self.split_out = False
+        
+        sub_split_end = split_end
+        if self.split_in :
+            if self.split_out:
+                sub_split_end = SplitEnd.BOTH
+            else:
+                sub_split_end = SplitEnd.IN
+        elif self.split_out:
+            sub_split_end = SplitEnd.OUT
+        else:
+            sub_split_end = SplitEnd.NONE
 
-        print(
-            f"DiaEigenLayer {name} ,split_num={split_num}, split_end={split_end}",
-            f"weight shape : {self.module.module.weight.shape} has bias: {self.module.has_bias()}, shape :{(self.module.module.bias.shape if self.module.has_bias() else None)}",
-        )
+        self._a_inv_local: torch.Tensor | FutureType | None = None
+        self._g_inv_local: torch.Tensor | FutureType | None = None
+
+        if sub_split_end == SplitEnd.NONE:
+            return
+        
         for i in range(split_num):
             sub_layer = DiaEigenLayer(
                 module=module,
                 name=name,
                 chunk_rank=i,
                 group_size=split_num,
-                split_end=split_end,
+                split_end=sub_split_end,
                 factor_dtype=factor_dtype,
                 grad_scaler=grad_scaler,
                 inv_dtype=inv_dtype,
@@ -78,9 +100,6 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
                 allreduce_method=allreduce_method,
             )
             self.sub_layers.append(sub_layer)
-
-        self._a_inv_local: torch.Tensor | FutureType | None = None
-        self._g_inv_local: torch.Tensor | FutureType | None = None
 
     @property
     def a_inv_local(self) -> torch.Tensor | None:
@@ -124,19 +143,31 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
            sub_layer.save_layer_grad_output(grad_output)
     
     def update_a_factor(self, alpha: float = 0.95) -> None:
+        if not self.split_in:
+            super().update_a_factor(alpha=alpha)
+            return
         for sub_layer in self.sub_layers:
             sub_layer.update_a_factor(alpha=alpha)
 
     def update_g_factor(self, alpha: float = 0.95) -> None:
+        if not self.split_out:
+            super().update_g_factor(alpha=alpha)
+            return
         for sub_layer in self.sub_layers:
             sub_layer.update_g_factor(alpha=alpha)
     
     def reduce_a_factor(self, group = None):
+        if not self.split_in:
+            super().reduce_a_factor(group=group)
+            return
         for sub_layer in self.sub_layers:
             if sub_layer.a_factor_width > 0:
                 sub_layer.reduce_a_factor(group=group)
     
     def reduce_g_factor(self, group = None):
+        if not self.split_out:
+            super().reduce_g_factor(group=group)
+            return
         for sub_layer in self.sub_layers:
             if sub_layer.g_factor_width > 0:
                 sub_layer.reduce_g_factor(group=group)
@@ -208,7 +239,6 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             self.a_inv_local = torch.mm(F, self.qa.t())  # 整体乘一次
             self.qa = None
             self.da = None
-            self.a_inv_local = MinMaxNormalization(self.a_inv_local)
         else:
             for sub_layer in self.sub_layers:
                 with torch.cuda.stream(sub_layer.stream):
@@ -217,6 +247,12 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
                 torch.cuda.current_stream().wait_stream(sub_layer.stream)
             self.a_inv_local = torch.block_diag(*[sub_layer.a_inv_local for sub_layer in self.sub_layers])
             self.a_inv_local.add_(damping)
+            """
+            if self.a_inv_local is None:
+                self.a_inv_local = a_inv_local
+            else:
+                self.a_inv_local = self.a_inv_local * 0.3 + a_inv_local * 0.7
+            """
             assert self.a_inv_local.shape[0] == self.module.get_grad().shape[1], "a_inv_local must match module output size"
             assert self.a_inv_local.shape == self.module.a_factor_shape, "a_inv_local must match module weights size"
 
@@ -229,7 +265,6 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             self.g_inv_local = Qg_scaled @ self.qg.t()
             self.qg = None
             self.dg = None
-            self.g_inv_local = MinMaxNormalization(self.g_inv_local)
         else:
             for sub_layer in self.sub_layers:
                 with torch.cuda.stream(sub_layer.stream):
@@ -238,6 +273,12 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
                 torch.cuda.current_stream().wait_stream(sub_layer.stream)
             self.g_inv_local = torch.block_diag(*[sub_layer.g_inv_local for sub_layer in self.sub_layers])
             self.g_inv_local.add_(damping)
+            """
+            if self.g_inv_local is None:
+                self.g_inv_local = g_inv_local
+            else:
+                self.g_inv_local = self.g_inv_local * 0.3 + g_inv_local * 0.7
+            """
             assert self.g_inv_local.shape[0] == self.g_inv_local.shape[1], "g_inv_local must be square"
             assert self.g_inv_local.shape == self.module.g_factor_shape, "g_inv_local must match module weights size"
 

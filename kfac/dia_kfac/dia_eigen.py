@@ -1,5 +1,6 @@
 from ..layers.eigen import *
 from ..layers.modules import get_cov, append_bias_ones, LinearModuleHelper, Conv2dModuleHelper
+from .norm_modules import LayerNormModuleHelper, BN2dModuleHelper
 from .common import *
 
 class DiaEigenLayer(KFACEigenLayer):
@@ -51,6 +52,7 @@ class DiaEigenLayer(KFACEigenLayer):
             prediv_eigenvalues=False,
             tdc=tdc,
             allreduce_method=AllreduceMethod.ALLREDUCE_BUCKETED,
+            name=name,
         )
 
         self.g_inv_gathered = g_inv_gathered
@@ -87,6 +89,34 @@ class DiaEigenLayer(KFACEigenLayer):
         Compute the chunk start/end indices and allocate eigendecomposition buffers
         according to the split_end configuration.
         """
+        # Special-case for Norm layers (LayerNorm / BatchNorm2d):
+        # For these, the activation-side factor A is always 2x2 ([xhat, 1]),
+        # so there is no point (and no correctness) in splitting the input (A).
+        # We therefore force no input split, while still allowing output (G) split
+        # across channels/parameter dimension.
+        if isinstance(self.module, (LayerNormModuleHelper, BN2dModuleHelper)):
+            device = self.module.module.weight.device
+            dtype = self.inv_dtype
+
+            # A factor: fixed width = 2
+            self.in_features = 2
+            self.input_chunk_start, self.input_chunk_end = 0, 2
+            self.a_factor_width = 2
+
+            # Force-disable input splitting for Norm layers
+            self.split_in = False
+
+            # G factor: width equals number of parameters (channels) of the affine part
+            out_features = int(self.module.module.weight.numel())
+            self.out_features = out_features
+
+            if self.split_out:
+                self._setup_output_chunk(chunk_rank, group_size, out_features, device, dtype)
+            else:
+                self.output_chunk_start, self.output_chunk_end = 0, out_features
+                self.g_factor_width = out_features
+            return
+
         in_features = self.module.module.weight.shape[1]
         out_features = self.module.module.weight.shape[0]
         self.in_features = in_features
@@ -251,6 +281,35 @@ class DiaEigenLayer(KFACEigenLayer):
                 g = g / self.grad_scaler()
             g = g / spatial_size
             g = get_cov(g)
+        elif isinstance(self.module, LayerNormModuleHelper):
+            # LayerNorm output-chunked G factor
+            gy = grad_output[0]
+            # Keep batch dimension as samples; sum over non-parameter, non-batch axes
+            norm_shape = getattr(self.module.module, 'normalized_shape', None)
+            if isinstance(norm_shape, int):
+                norm_ndims = 1
+            else:
+                norm_ndims = len(norm_shape)
+            param_dims = tuple(range(gy.ndim - norm_ndims, gy.ndim))
+            reduce_dims = tuple(d for d in range(gy.ndim) if d not in param_dims and d != 0)
+            # Aggregate over reduce dims -> [N, *normalized_shape]
+            gparam = gy.sum(dim=reduce_dims)
+            N = gparam.shape[0]
+            D = int(torch.tensor(norm_shape).prod().item()) if not isinstance(norm_shape, int) else norm_shape
+            gparam = gparam.reshape(N, D)
+            # Slice parameter (column) chunk
+            g = gparam[:, self.output_chunk_start : self.output_chunk_end].to(self.factor_dtype)
+            if self.grad_scaler is not None:
+                g = g / self.grad_scaler()
+            g = get_cov(g)
+        elif isinstance(self.module, BN2dModuleHelper):
+            # BatchNorm2d output-chunked G factor: sum over spatial, keep batch as samples
+            gy = grad_output[0]
+            gparam = gy[:, self.output_chunk_start : self.output_chunk_end, ...].to(self.factor_dtype)
+            gparam = gparam.sum(dim=(2, 3))  # [N, C_chunk]
+            if self.grad_scaler is not None:
+                gparam = gparam / self.grad_scaler()
+            g = get_cov(gparam)
         else:
             raise ValueError(f"Unsupported module type: {type(self.module)}")
 
@@ -288,7 +347,8 @@ class DiaEigenLayer(KFACEigenLayer):
 
     def compute_a_inv(self, damping: float = 0.001) -> None:
         if self.a_factor_width == 0:
-            self.a_inv_local = torch.empty((0,0)).to(device=self.module.module.weight.device, dtype=self.inv_dtype)
+            if self.a_inv_local is None:
+                self.a_inv_local = torch.empty((0,0)).to(device=self.module.module.weight.device, dtype=self.inv_dtype)
             return
         super().compute_a_inv(damping=damping)
         # Gather each block's qa and da into self.qa_gathered and self.da_gathered
@@ -303,7 +363,8 @@ class DiaEigenLayer(KFACEigenLayer):
 
     def compute_g_inv(self, damping: float = 0.001) -> None:
         if self.g_factor_width == 0:
-            self.g_inv_local = torch.empty((0,0)).to(device=self.module.module.weight.device, dtype=self.inv_dtype)
+            if self.g_inv_local is None:
+                self.g_inv_local = torch.empty((0,0)).to(device=self.module.module.weight.device, dtype=self.inv_dtype)
             return
         super().compute_g_inv(damping=damping)
         # Gather each block's qg and dg into self.qg_gathered and self.dg_gathered

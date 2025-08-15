@@ -10,3 +10,42 @@ out
 *.pytest_cache
 logs
 .vscode
+__pycache__/
+dist/
+build/
+*.db
+*.sqlite3
+*.log
+*.pot
+*.mo
+.env
+.env*
+venv/
+ENV/
+.envrc
+# Jupyter
+.ipynb_checkpoints
+# OS
+.DS_Store
+Thumbs.db
+# Git
+*.swp
+*.swo
+*.bak
+*.tmp
+# Data
+*.h5
+*.ckpt
+*.pth
+*.pt
+*.npz
+*.npy
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.json
+*.yaml
+*.yml
+# Shell logs
+*.sh.*

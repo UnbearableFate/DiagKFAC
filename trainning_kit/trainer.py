@@ -1,7 +1,6 @@
 import datetime
 import math
 import os
-from pyexpat import model
 import time
 from typing import Callable
 import warnings
@@ -11,7 +10,6 @@ import kfac
 from optimizers.AdaFisher import AdaFisher
 from trainning_kit import presets
 import torch
-import torchvision
 from trainning_kit  import utils
 from .sampler import RASampler
 from torch import nn
@@ -365,8 +363,6 @@ class Trainer:
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print(f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {dist.get_rank()}")
-        if dist.is_initialized():
-            dist.destroy_process_group()
 
     def test_only(self):
         torch.backends.cudnn.benchmark = False

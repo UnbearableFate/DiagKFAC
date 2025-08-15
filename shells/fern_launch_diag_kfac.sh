@@ -16,7 +16,7 @@ mpirun --host fern02,fern01 \
  --experiment-name="diag_kfac_test_ddp" \
  --model='resnet18Cifar' \
  --dataset='cifar10' \
- --epochs 60 \
+ --epochs 50 \
  --batch-size 256 \
  --opt adamw \
  --lr 0.001 \
@@ -39,7 +39,7 @@ mpirun --host fern02,fern01 \
  --kfac-factor-update-steps 10 \
  --kfac-inv-update-steps 100 \
  --kfac-damping 0.003 \
- --kfac-kl-clip 0.001 \
+ --kfac-kl-clip 0.008 \
  --amp
  #--model-ema \
  #--ra-sampler \

@@ -1,0 +1,6 @@
+torch
+torchvision
+mpi4py
+einops
+tensorboard
+timm

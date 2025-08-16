@@ -33,6 +33,7 @@ class Trainer:
             args.distributed = True
             self.world_size = dist.get_world_size()
             self.rank = dist.get_rank()
+            utils.setup_for_distributed(self.rank == 0)
         else:
             args.distributed = False
             self.world_size = 1
@@ -140,6 +141,8 @@ class Trainer:
         config_lines.append(f"Output Directory     : {args.output_dir}")
         config_lines.append(f"Dataset Size         : {len(self.data_manager.train_loader.dataset)}")
         config_lines.append(f"Number of Classes    : {self.data_manager.num_classes}")
+        config_lines.append(f"World Size           : {self.world_size}")
+        config_lines.append(f"Rank                 : {self.rank}")
         config_lines.append("=" * 60)
 
         for line in config_lines:
@@ -173,9 +176,11 @@ class Trainer:
             custom_keys_weight_decay=custom_keys_weight_decay if len(custom_keys_weight_decay) > 0 else None,
         )
 
+        """
         if self.world_size > 1:
             args.lr = args.lr * math.sqrt(self.world_size)
             args.lr_min = args.lr_min * math.sqrt(self.world_size)
+        """
 
         opt_name = args.opt.lower()
         if opt_name.startswith("sgd"):
@@ -329,7 +334,7 @@ class Trainer:
         optimizer = self.optimizer
         model_ema = self.model_ema
         scaler = self.scaler
-        print(f"Start training at {datetime.datetime.now()} at rank {dist.get_rank()}")
+        print(f"Start training at {datetime.datetime.now()} at rank {self.rank}")
         start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
@@ -362,7 +367,7 @@ class Trainer:
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print(f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {dist.get_rank()}")
+        print(f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {self.rank}")
 
     def test_only(self):
         torch.backends.cudnn.benchmark = False
@@ -379,7 +384,7 @@ class Trainer:
         model = self.model
         device = self.device
         model.eval()
-        metric_logger = utils.MetricLogger(delimiter="  ")
+        metric_logger = utils.MetricLogger(delimiter="  ", rank=self.rank)
         header = f"Test: {log_suffix}"
 
         num_processed_samples = 0

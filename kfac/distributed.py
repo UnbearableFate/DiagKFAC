@@ -15,11 +15,13 @@ try:
     flatten = apex_C.flatten  # pragma: no cover
     unflatten = apex_C.unflatten  # pragma: no cover
 except ImportError:
+    """
     warnings.warn(
         'NVIDIA Apex is not installed or was not installed with --cpp_ext. '
         'Falling back to PyTorch flatten and unflatten.',
         stacklevel=2,
     )
+    """
     flatten = torch._utils._flatten_dense_tensors
     unflatten = torch._utils._unflatten_dense_tensors
 

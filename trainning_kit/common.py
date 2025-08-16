@@ -26,27 +26,27 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--data-path", default=None, type=str, help="dataset path")
     parser.add_argument("--model", default=None, type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu; default: cuda)")
-    parser.add_argument("-b", "--batch-size", default=32, type=int, help="images per gpu, total batch size = NGPU x batch_size")
+    parser.add_argument("-b", "--batch-size", default=512, type=int, help="images per gpu, total batch size = NGPU x batch_size")
     parser.add_argument("--epochs", default=90, type=int, metavar="N", help="number of total epochs to run")
     parser.add_argument("-j", "--workers", default=16, type=int, metavar="N", help="number of data loading workers (default: 16)")
     parser.add_argument("--opt", default="sgd", type=str, help="optimizer")
-    parser.add_argument("--lr", default=0.1, type=float, help="initial learning rate")
+    parser.add_argument("--lr", default=0.001, type=float, help="initial learning rate")
     parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
-    parser.add_argument("--wd", "--weight-decay", default=1e-4, type=float, metavar="W", help="weight decay (default: 1e-4)", dest="weight_decay")
+    parser.add_argument("--wd", "--weight-decay", default=0.03, type=float, metavar="W", help="weight decay (default: 1e-4)", dest="weight_decay")
     parser.add_argument("--norm-weight-decay", default=None, type=float, help="weight decay for Normalization layers (default: None, same as --wd)")
     parser.add_argument("--bias-weight-decay", default=None, type=float, help="weight decay for bias parameters (default: None, same as --wd)")
     parser.add_argument("--transformer-embedding-decay", default=None, type=float, help="weight decay for transformer embeddings (default: None, same as --wd)")
-    parser.add_argument("--label-smoothing", default=0.0, type=float, help="label smoothing (default: 0.0)", dest="label_smoothing")
-    parser.add_argument("--mixup-alpha", default=0.0, type=float, help="mixup alpha (default: 0.0)")
-    parser.add_argument("--cutmix-alpha", default=0.0, type=float, help="cutmix alpha (default: 0.0)")
-    parser.add_argument("--lr-scheduler", default="steplr", type=str, help="learning rate scheduler (default: steplr)")
+    parser.add_argument("--label-smoothing", default=0.1, type=float, help="label smoothing (default: 0.0)", dest="label_smoothing")
+    parser.add_argument("--mixup-alpha", default=0.8, type=float, help="mixup alpha (default: 0.0)")
+    parser.add_argument("--cutmix-alpha", default=1.0, type=float, help="cutmix alpha (default: 0.0)")
+    parser.add_argument("--lr-scheduler", default="onecycle", type=str, help="learning rate scheduler (default: steplr)")
     parser.add_argument("--lr-warmup-epochs", default=0, type=int, help="number of warmup epochs (default: 0)")
     parser.add_argument("--lr-warmup-method", default="constant", type=str, help="warmup method (default: constant)")
     parser.add_argument("--lr-warmup-decay", default=0.01, type=float, help="learning rate warmup decay")
     parser.add_argument("--lr-step-size", default=30, type=int, help="decrease lr every step-size epochs")
     parser.add_argument("--lr-gamma", default=0.1, type=float, help="decrease lr by a factor of lr-gamma")
-    parser.add_argument("--pct-start", default=0.3, type=float, help="percentage of total steps for the warmup phase")
-    parser.add_argument("--lr-min", default=0.0, type=float, help="minimum learning rate (default: 0.0)")
+    parser.add_argument("--pct-start", default=0.2, type=float, help="percentage of total steps for the warmup phase")
+    parser.add_argument("--lr-min", default=1e-5, type=float, help="minimum learning rate (default: 0.0)")
     parser.add_argument("--print-freq", default=100, type=int, help="print frequency")
     parser.add_argument("--output-dir", default="./out", type=str, help="directory to save outputs")
     parser.add_argument("--resume", default="", type=str, help="path to checkpoint")
@@ -54,10 +54,10 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--cache-dataset", dest="cache_dataset", action="store_true", help="cache dataset for faster initialization")
     parser.add_argument("--sync-bn", dest="sync_bn", action="store_true", help="use synchronized batch normalization")
     parser.add_argument("--test-only", dest="test_only", action="store_true", help="only test the model")
-    parser.add_argument("--auto-augment", default=None, type=str, help="auto augment policy (default: None)")
+    parser.add_argument("--auto-augment", default="ta_wide", type=str, help="auto augment policy (default: None)")
     parser.add_argument("--ra-magnitude", default=9, type=int, help="magnitude of auto augment policy")
     parser.add_argument("--augmix-severity", default=3, type=int, help="severity of augmix policy")
-    parser.add_argument("--random-erase", default=0.0, type=float, help="random erasing probability (default: 0.0)")
+    parser.add_argument("--random-erase", default=0.25, type=float, help="random erasing probability (default: 0.0)")
     parser.add_argument("--amp", action="store_true", help="use torch.cuda.amp for mixed precision training")
     parser.add_argument("--world-size", default=1, type=int, help="number of distributed processes")
     parser.add_argument("--dist-url", default="env://", type=str, help="url for distributed training setup")
@@ -65,7 +65,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--model-ema-steps", type=int, default=32, help="iterations between EMA updates (default: 32)")
     parser.add_argument("--model-ema-decay", type=float, default=0.99998, help="EMA decay factor (default: 0.99998)")
     parser.add_argument("--use-deterministic-algorithms", action="store_true", help="force the use of deterministic algorithms")
-    parser.add_argument("--interpolation", default="bilinear", type=str, help="interpolation method (default: bilinear)")
+    parser.add_argument("--interpolation", default="bicubic", type=str, help="interpolation method (default: bilinear)")
     parser.add_argument("--val-resize-size", default=256, type=int, help="resize size for validation (default: 256)")
     parser.add_argument("--val-crop-size", default=224, type=int, help="central crop size for validation (default: 224)")
     parser.add_argument("--train-crop-size", default=224, type=int, help="random crop size for training (default: 224)")
@@ -136,11 +136,17 @@ def merged_args_parser(add_help=True):
     if "LOCAL_RANK" in os.environ:
         args.local_rank = int(os.environ["LOCAL_RANK"])
 
-    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist","imagenet1k"] and current_system in ["fern", "mac", "pegasus", "miyabi"]:
+    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist"] and current_system in ["fern", "mac", "pegasus", "miyabi"]:
         args.data_path = os.path.join(PRIVATE_DATA_ROOT[current_system], args.dataset)
         if not os.path.exists(args.data_path):
             raise ValueError(f"Dataset path {args.data_path} does not exist. Please set the correct path.")
-
+    
+    if args.dataset == "imagenet":
+        args.data_path = "/work/xg24i002/share/datasets/imagenet1k"
+    
     args.workspace_path = WORKSPACE_ROOT[current_system]
 
+    args.experiment_name = f"{args.experiment_name}_{args.opt}_{args.preconditioner if args.preconditioner else 'none'}"
+
+    os.chdir(args.workspace_path)
     return args

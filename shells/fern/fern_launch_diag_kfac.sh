@@ -11,29 +11,17 @@ mpirun --host fern02,fern01 \
  -np 2 -map-by ppr:1:node \
  -x MASTER_ADDR -x MASTER_PORT \
  /home/yu/miniconda3/envs/py313/bin/python \
- main.py \
+ main_mpi.py \
  --timestamp="$current_time" \
  --experiment-name="diag_kfac_test_ddp" \
  --model='resnet18Cifar' \
  --dataset='cifar10' \
- --epochs 50 \
+ --epochs 10 \
  --batch-size 256 \
  --opt adamw \
  --lr 0.001 \
  --weight-decay 0.001  \
- --norm-weight-decay 0.0 \
- --bias-weight-decay 0.0 \
- --transformer-embedding-decay 0.0 \
- --lr-scheduler onecycle \
- --pct-start 0.2 \
- --label-smoothing 0.1 \
- --mixup-alpha 0.8 \
  --clip-grad-norm 2.0 \
- --cutmix-alpha 1.0 \
- --random-erase 0.25 \
- --interpolation bicubic \
- --auto-augment ta_wide \
- --val-resize-size 224 \
  --workers 8 \
  --preconditioner diag_kfac \
  --kfac-factor-update-steps 10 \
@@ -41,6 +29,3 @@ mpirun --host fern02,fern01 \
  --kfac-damping 0.003 \
  --kfac-kl-clip 0.008 \
  --amp
- #--model-ema \
- #--ra-sampler \
- #--ra-reps 4 \

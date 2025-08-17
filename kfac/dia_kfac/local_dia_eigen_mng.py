@@ -6,6 +6,7 @@ from typing import List
 from enum import Enum
 from .common import *
 
+
 class LocalDiaEigenLayerManager(KFACEigenLayer):
     """
     DiaEigenLayer is a class that implements the KFAC algorithm for diagonal
@@ -54,19 +55,23 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             name=name,
         )
 
-        self.sub_layers : List[DiaEigenLayer] = []
+        self.sub_layers: List[DiaEigenLayer] = []
         self.split_in = split_end in [SplitEnd.IN, SplitEnd.BOTH]
         self.split_out = split_end in [SplitEnd.OUT, SplitEnd.BOTH]
-        
+
         if self.split_in and self.module.a_factor_shape[0] // split_num < 8:
-            print(f"Disabling split_in at layer {self.name} because a factor shape {self.module.a_factor_shape[0]} // {split_num} < 8")
+            print(
+                f"Disabling split_in at layer {self.name} because a factor shape {self.module.a_factor_shape[0]} // {split_num} < 8"
+            )
             self.split_in = False
         if self.split_out and self.module.g_factor_shape[0] // split_num < 8:
-            print(f"Disabling split_out at layer {self.name} because g factor shape {self.module.g_factor_shape[0]} // {split_num} < 8")
+            print(
+                f"Disabling split_out at layer {self.name} because g factor shape {self.module.g_factor_shape[0]} // {split_num} < 8"
+            )
             self.split_out = False
-        
+
         sub_split_end = split_end
-        if self.split_in :
+        if self.split_in:
             if self.split_out:
                 sub_split_end = SplitEnd.BOTH
             else:
@@ -81,7 +86,7 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
 
         if sub_split_end == SplitEnd.NONE:
             return
-        
+
         for i in range(split_num):
             sub_layer = DiaEigenLayer(
                 module=module,
@@ -140,8 +145,8 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             return
 
         for sub_layer in self.sub_layers:
-           sub_layer.save_layer_grad_output(grad_output)
-    
+            sub_layer.save_layer_grad_output(grad_output)
+
     def update_a_factor(self, alpha: float = 0.95) -> None:
         if not self.split_in:
             super().update_a_factor(alpha=alpha)
@@ -155,16 +160,16 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             return
         for sub_layer in self.sub_layers:
             sub_layer.update_g_factor(alpha=alpha)
-    
-    def reduce_a_factor(self, group = None):
+
+    def reduce_a_factor(self, group=None):
         if not self.split_in:
             super().reduce_a_factor(group=group)
             return
         for sub_layer in self.sub_layers:
             if sub_layer.a_factor_width > 0:
                 sub_layer.reduce_a_factor(group=group)
-    
-    def reduce_g_factor(self, group = None):
+
+    def reduce_g_factor(self, group=None):
         if not self.split_out:
             super().reduce_g_factor(group=group)
             return
@@ -180,8 +185,8 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         if self.a_inv_local is None:
             if get_rank() == src:
                 raise RuntimeError(
-                    f'Attempt to broadcast A inv from src={src} but this rank '
-                    'has not computed A inv yet.',
+                    f"Attempt to broadcast A inv from src={src} but this rank "
+                    "has not computed A inv yet.",
                 )
             self.a_inv_local = torch.empty(
                 self.module.a_factor_shape,
@@ -215,8 +220,8 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         if self.g_inv_local is None:
             if get_rank() == src:
                 raise RuntimeError(
-                    f'Attempt to broadcast G inv from src={src} but this rank '
-                    'has not computed G inv yet.',
+                    f"Attempt to broadcast G inv from src={src} but this rank "
+                    "has not computed G inv yet.",
                 )
             self.g_inv_local = torch.empty(
                 self.module.g_factor_shape,
@@ -235,26 +240,25 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             super().compute_a_inv(damping=damping)
             # Gather each block's qa and da into self.qa_gathered and self.da_gathered
             inv_vals = 1.0 / (self.da + damping)  # (k,)
-            F = self.qa.clone().mul_(inv_vals.unsqueeze(0))  # 先克隆，再对每列 in-place 缩放
+            F = self.qa.clone().mul_(
+                inv_vals.unsqueeze(0)
+            )  # 先克隆，再对每列 in-place 缩放
             self.a_inv_local = torch.mm(F, self.qa.t())  # 整体乘一次
             self.qa = None
             self.da = None
         else:
             for sub_layer in self.sub_layers:
-                with torch.cuda.stream(sub_layer.stream):
-                    sub_layer.compute_a_inv(damping=damping)
-            for sub_layer in self.sub_layers:
-                torch.cuda.current_stream().wait_stream(sub_layer.stream)
-            self.a_inv_local = torch.block_diag(*[sub_layer.a_inv_local for sub_layer in self.sub_layers])
+                sub_layer.compute_a_inv(damping=damping)
+            self.a_inv_local = torch.block_diag(
+                *[sub_layer.a_inv_local for sub_layer in self.sub_layers]
+            )
             self.a_inv_local.add_(damping)
-            """
-            if self.a_inv_local is None:
-                self.a_inv_local = a_inv_local
-            else:
-                self.a_inv_local = self.a_inv_local * 0.3 + a_inv_local * 0.7
-            """
-            assert self.a_inv_local.shape[0] == self.module.get_grad().shape[1], "a_inv_local must match module output size"
-            assert self.a_inv_local.shape == self.module.a_factor_shape, "a_inv_local must match module weights size"
+            assert (
+                self.a_inv_local.shape[0] == self.module.get_grad().shape[1]
+            ), "a_inv_local must match module output size"
+            assert (
+                self.a_inv_local.shape == self.module.a_factor_shape
+            ), "a_inv_local must match module weights size"
 
     def compute_g_inv(self, damping: float = 0.001) -> None:
         if not self.split_out:
@@ -267,20 +271,18 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             self.dg = None
         else:
             for sub_layer in self.sub_layers:
-                with torch.cuda.stream(sub_layer.stream):
-                    sub_layer.compute_g_inv(damping=damping)
-            for sub_layer in self.sub_layers:
-                torch.cuda.current_stream().wait_stream(sub_layer.stream)
-            self.g_inv_local = torch.block_diag(*[sub_layer.g_inv_local for sub_layer in self.sub_layers])
+                sub_layer.compute_g_inv(damping=damping)
+            self.g_inv_local = torch.block_diag(
+                *[sub_layer.g_inv_local for sub_layer in self.sub_layers]
+            )
             self.g_inv_local.add_(damping)
-            """
-            if self.g_inv_local is None:
-                self.g_inv_local = g_inv_local
-            else:
-                self.g_inv_local = self.g_inv_local * 0.3 + g_inv_local * 0.7
-            """
-            assert self.g_inv_local.shape[0] == self.g_inv_local.shape[1], "g_inv_local must be square"
-            assert self.g_inv_local.shape == self.module.g_factor_shape, "g_inv_local must match module weights size"
+
+            assert (
+                self.g_inv_local.shape[0] == self.g_inv_local.shape[1]
+            ), "g_inv_local must be square"
+            assert (
+                self.g_inv_local.shape == self.module.g_factor_shape
+            ), "g_inv_local must match module weights size"
 
     def preconditioned_grad(self, damping: float = 0.001) -> None:
         """Compute precondition gradient of each weight in module.
@@ -299,5 +301,5 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         # self.grad = (self.g_inv @ grad @ self.a_inv).to(grad_type)
         self.grad = self.g_inv_local @ grad @ self.a_inv_local
         self.grad = self.grad.to(grad_type)
-        #self.grad.add_(grad).mul_(0.5).to(dtype=grad_type)
+        # self.grad.add_(grad).mul_(0.5).to(dtype=grad_type)
         return

@@ -26,7 +26,12 @@ from kfac.layers.base import KFACBaseLayer
 from kfac.layers.eigen import KFACEigenLayer
 from kfac.layers.inverse import KFACInverseLayer
 from kfac.layers.modules import LinearModuleHelper
-from kfac.layers.register import any_match, get_flattened_modules, get_module_helper, requires_grad
+from kfac.layers.register import (
+    any_match,
+    get_flattened_modules,
+    get_module_helper,
+    requires_grad,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +74,7 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         # Distribution strategy
         accumulation_steps: int = 1,
         allreduce_bucket_cap_mb: float = 25.0,
-        assignment_strategy: (
-            AssignmentStrategy | str
-        ) = AssignmentStrategy.COMPUTE,
+        assignment_strategy: AssignmentStrategy | str = AssignmentStrategy.COMPUTE,
         colocate_factors: bool = True,
         compute_method: ComputeMethod | str = ComputeMethod.EIGEN,
         compute_eigenvalue_outer_product: bool = True,
@@ -80,15 +83,13 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         ) = DistributedStrategy.COMM_OPT,
         symmetry_aware: bool = False,
         # Optional other parameters
-        grad_scaler: (
-            torch.cuda.amp.GradScaler | Callable[[], float] | None
-        ) = None,
+        grad_scaler: torch.cuda.amp.GradScaler | Callable[[], float] | None = None,
         factor_dtype: torch.dtype | None = None,
         inv_dtype: torch.dtype = torch.float32,
         skip_layers: list[str] | None = None,
         update_factors_in_hook: bool = True,
         loglevel: int = logging.DEBUG,
-        split_num: int = 4
+        split_num: int = 4,
     ) -> None:
         """Init KFACPreconditioner.
 
@@ -158,20 +159,18 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             loglevel (int): logging level (default: logging.DEBUG).
         """
         if allreduce_bucket_cap_mb < 0:
-            raise ValueError('allreduce_bucket_cap_mb must be >= 0')
+            raise ValueError("allreduce_bucket_cap_mb must be >= 0")
         if (
             compute_method == ComputeMethod.EIGEN
             and compute_eigenvalue_outer_product
             and not colocate_factors
         ):
             raise ValueError(
-                'colocate_factors must be True to use '
-                'compute_eigenvalue_outer_product',
+                "colocate_factors must be True to use "
+                "compute_eigenvalue_outer_product",
             )
         if isinstance(assignment_strategy, str):
-            assignment_strategy = AssignmentStrategy[
-                assignment_strategy.upper()
-            ]
+            assignment_strategy = AssignmentStrategy[assignment_strategy.upper()]
         if isinstance(compute_method, str):
             compute_method = ComputeMethod[compute_method.upper()]
 
@@ -185,15 +184,15 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             elif distributed_strategy == DistributedStrategy.MEM_OPT:
                 grad_worker_fraction = 1.0 / size
             else:
-                raise AssertionError(f'Unknown enum {grad_worker_fraction}')
+                raise AssertionError(f"Unknown enum {grad_worker_fraction}")
         else:
             if not 0 <= grad_worker_fraction or not 1 >= grad_worker_fraction:
-                raise ValueError('grad_worker_fraction must in [0, 1]')
+                raise ValueError("grad_worker_fraction must in [0, 1]")
             if grad_worker_fraction == 0:
                 grad_worker_fraction = 1.0 / size
             if size % max(1, round(size * grad_worker_fraction)) != 0:
                 raise ValueError(
-                    'grad_worker_fraction must produce groups of equal size',
+                    "grad_worker_fraction must produce groups of equal size",
                 )
             if grad_worker_fraction == 1:
                 grad_worker_fraction = 1.0  # ensure float
@@ -204,13 +203,10 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
                 distributed_strategy = DistributedStrategy.HYBRID_OPT
         assert isinstance(grad_worker_fraction, float)
 
-        if (
-            not colocate_factors
-            and distributed_strategy is DistributedStrategy.MEM_OPT
-        ):
+        if not colocate_factors and distributed_strategy is DistributedStrategy.MEM_OPT:
             warnings.warn(
-                'grad_worker_frac=1/world_size (MEM_OPT) requires '
-                'colocate_factors=True. Enabling colocate_factors.',
+                "grad_worker_frac=1/world_size (MEM_OPT) requires "
+                "colocate_factors=True. Enabling colocate_factors.",
                 stacklevel=2,
             )
             colocate_factors = True
@@ -218,9 +214,7 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         self.allreduce_bucket_cap_mb = allreduce_bucket_cap_mb
         self.assignment_strategy = assignment_strategy
         self.colocate_factors = colocate_factors
-        self.compute_eigenvalue_outer_product = (
-            compute_eigenvalue_outer_product
-        )
+        self.compute_eigenvalue_outer_product = compute_eigenvalue_outer_product
         self.compute_method = compute_method
         self.distributed_strategy = distributed_strategy
         self.grad_worker_fraction = grad_worker_fraction
@@ -250,14 +244,12 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         layer_type: type[KFACBaseLayer]
         if self.compute_method == ComputeMethod.EIGEN:
             layer_type = KFACEigenLayer
-            layer_kwargs['prediv_eigenvalues'] = (
-                self.compute_eigenvalue_outer_product
-            )
+            layer_kwargs["prediv_eigenvalues"] = self.compute_eigenvalue_outer_product
         elif self.compute_method == ComputeMethod.INVERSE:
             layer_type = KFACInverseLayer
         else:
             raise AssertionError(
-                f'Unknown compute_method={self.compute_method}',
+                f"Unknown compute_method={self.compute_method}",
             )
 
         kfac_layers = register_modules(
@@ -278,13 +270,13 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             cost_func = lambda n: n**2  # noqa: E731
         else:
             raise AssertionError(
-                f'Unknown assignment_strategy={self.assignment_strategy}',
+                f"Unknown assignment_strategy={self.assignment_strategy}",
             )
 
         work = {
             name: {
-                'A': cost_func(kfac_layer.module.a_factor_shape[0]),
-                'G': cost_func(kfac_layer.module.g_factor_shape[0]),
+                "A": cost_func(kfac_layer.module.a_factor_shape[0]),
+                "G": cost_func(kfac_layer.module.g_factor_shape[0]),
             }
             for name, kfac_layer in kfac_layers.values()
         }
@@ -302,24 +294,22 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             group_func=new_group if dist.is_initialized() else _mock_new_group,
             colocate_factors=self.colocate_factors,
         )
-        logger.log(loglevel, f'KFAC layer assignments: {assignment}')
+        logger.log(loglevel, f"KFAC layer assignments: {assignment}")
 
         defaults = {
-            'allreduce_bucket_cap_mb': self.allreduce_bucket_cap_mb,
-            'allreduce_method': self.allreduce_method,
-            'assignment_strategy': self.assignment_strategy,
-            'colocate_factors': self.colocate_factors,
-            'compute_eigenvalue_outer_product': (
-                self.compute_eigenvalue_outer_product
-            ),
-            'compute_method': self.compute_method,
-            'distributed_strategy': self.distributed_strategy,
-            'grad_worker_fraction': self.grad_worker_fraction,
-            'grad_scaler': self.grad_scaler is not None,
-            'factor_dtype': self.factor_dtype,
-            'inv_dtype': self.inv_dtype,
-            'skip_layers': self.skip_layers,
-            'symmetry_aware': self.symmetry_aware,
+            "allreduce_bucket_cap_mb": self.allreduce_bucket_cap_mb,
+            "allreduce_method": self.allreduce_method,
+            "assignment_strategy": self.assignment_strategy,
+            "colocate_factors": self.colocate_factors,
+            "compute_eigenvalue_outer_product": (self.compute_eigenvalue_outer_product),
+            "compute_method": self.compute_method,
+            "distributed_strategy": self.distributed_strategy,
+            "grad_worker_fraction": self.grad_worker_fraction,
+            "grad_scaler": self.grad_scaler is not None,
+            "factor_dtype": self.factor_dtype,
+            "inv_dtype": self.inv_dtype,
+            "skip_layers": self.skip_layers,
+            "symmetry_aware": self.symmetry_aware,
         }
 
         super().__init__(
@@ -337,7 +327,103 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             tdc=self.tdc,
             loglevel=loglevel,
         )
-    
+
+    @torch.no_grad()
+    def step(self) -> None:
+        """Perform one K-FAC step.
+
+        Note:
+            This function should always be called before `optimizer.step()` as
+            it modifies the gradients and does not modify the weights.
+
+        Note:
+            Gradients must be averaged across ranks before calling `step()`.
+            This condition is guaranteed to be true if using the
+            `DistributedDataParallel` model wrapper as gradients are
+            communicated during `loss.backward()`.
+        """
+        if (
+            not self._update_factors_in_hook
+            and self.steps % self.factor_update_steps == 0
+        ):
+            for name, layer in reversed(list(self._layers.values())):
+                self._mini_steps[name] = 0
+                layer.update_a_factor(alpha=self.factor_decay)
+                layer.reduce_a_factor(self._assignment.factor_group(name, "A"))
+                layer.update_g_factor(alpha=self.factor_decay)
+                layer.reduce_g_factor(self._assignment.factor_group(name, "G"))
+
+        # Flush last allreduce bucket from forward/backward pass.
+        # Will be a no-op if bucketing was not used
+        self._tdc.flush_allreduce_buckets()
+
+        # Compute Inverses
+        if self.steps % self.inv_update_steps == 0:
+            for name, layer in reversed(list(self._layers.values())):
+                layer: LocalDiaEigenLayerManager  # 类型注释
+                if not layer.split_in:
+                    if get_rank() == self._assignment.inv_worker(name, "A"):
+                        layer.compute_a_inv(damping=self.damping)
+                    layer.broadcast_a_inv(
+                        src=self._assignment.inv_worker(name, "A"),
+                        group=None,
+                    )
+                else:
+                    for sub_layer in layer.sub_layers:
+                        if sub_layer.input_chunk_end == sub_layer.input_chunk_start:
+                            continue
+                        if get_rank() == self._assignment.inv_worker(name, "A"):
+                            sub_layer.compute_a_inv(damping=self.damping)
+                        sub_layer.broadcast_a_inv(
+                            src=self._assignment.inv_worker(name, "A"),
+                            group=None,
+                        )
+                if not layer.split_out:
+                    if get_rank() == self._assignment.inv_worker(name, "G"):
+                        layer.compute_g_inv(damping=self.damping)
+                    layer.broadcast_g_inv(
+                        src=self._assignment.inv_worker(name, "G"),
+                        group=None,
+                    )
+                else:
+                    for sub_layer in layer.sub_layers:
+                        if get_rank() == self._assignment.inv_worker(name, "G"):
+                            sub_layer.compute_g_inv(damping=self.damping)
+                        sub_layer.broadcast_g_inv(
+                            src=self._assignment.inv_worker(name, "G"),
+                            group=None,
+                        )
+            self._tdc.flush_allreduce_buckets()
+            
+            for name, layer in reversed(list(self._layers.values())):
+                layer: LocalDiaEigenLayerManager  # 类型注释
+                if layer.split_in:
+                    layer.a_inv_local = torch.block_diag(*[sub_layer.a_inv_local for sub_layer in layer.sub_layers])
+                    layer.a_inv_local.add_(self.damping)
+                if layer.split_out:
+                    layer.g_inv_local = torch.block_diag(*[sub_layer.g_inv_local for sub_layer in layer.sub_layers])
+                    layer.g_inv_local.add_(self.damping)
+
+        # Compute Preconditioned Gradients
+        for name, layer in reversed(list(self._layers.values())):
+            if self._assignment.is_grad_worker(name):
+                layer.preconditioned_grad(damping=self.damping)
+            if self._assignment.broadcast_gradients():
+                layer.broadcast_grad(
+                    src=self._assignment.src_grad_worker(name),
+                    group=self._assignment.grad_receiver_group(name),
+                )
+        self._tdc.flush_allreduce_buckets()
+
+        scale = None if self.kl_clip is None else self._compute_grad_scale()
+
+        # Update gradients in-place
+        for _, layer in reversed(list(self._layers.values())):
+            layer.update_grad(scale=scale)
+        self._steps += 1
+        self._mini_steps = defaultdict(int)
+
+
 def register_modules(
     model: torch.nn.Module,
     skip_layers: list[str],
@@ -370,10 +456,9 @@ def register_modules(
             module_helper = get_module_helper(module)
             if module_helper is None:
                 continue
-            kfac_layer = LocalDiaEigenLayerManager(module= module_helper,
-                                                        name=name, 
-                                                        split_num=split_num,
-                                                        **layer_kwargs)
+            kfac_layer = LocalDiaEigenLayerManager(
+                module=module_helper, name=name, split_num=split_num, **layer_kwargs
+            )
             kfac_layer.name = name
             # get_flattened_modules() should never give us modules with the
             # same name

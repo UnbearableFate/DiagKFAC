@@ -112,7 +112,7 @@ def merged_args_parser(add_help=True):
         "--dataset",
         default="cifar10",
         type=str,
-        choices=["imagenet", "cifar10", "fashionmnist"],
+        choices=["imagenet", "cifar10","cifar100", "fashionmnist"],
         help="dataset name (default: imagenet)",
     )
 
@@ -136,10 +136,10 @@ def merged_args_parser(add_help=True):
     if "LOCAL_RANK" in os.environ:
         args.local_rank = int(os.environ["LOCAL_RANK"])
 
-    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist"] and current_system in ["fern", "mac", "pegasus", "miyabi"]:
+    if args.data_path is None and args.dataset in ["cifar10", "fashionmnist","minist","cifar100"] and current_system in ["fern", "mac", "pegasus", "miyabi"]:
         args.data_path = os.path.join(PRIVATE_DATA_ROOT[current_system], args.dataset)
-        if not os.path.exists(args.data_path):
-            raise ValueError(f"Dataset path {args.data_path} does not exist. Please set the correct path.")
+        #if not os.path.exists(args.data_path):
+        #    raise ValueError(f"Dataset path {args.data_path} does not exist. Please set the correct path.")
     
     if args.dataset == "imagenet":
         args.data_path = "/work/xg24i002/share/datasets/imagenet1k"

@@ -164,7 +164,7 @@ cifar10_transform_train = transforms.Compose(
             (0.2023, 0.1994, 0.2010),
         ),
     ],
-)
+)    
 
 cifar10_transform_test = transforms.Compose(
     [
@@ -176,51 +176,71 @@ cifar10_transform_test = transforms.Compose(
     ],
 )
 
+cifar100_transform_train = transforms.Compose(
+    [
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            (0.5071, 0.4867, 0.4408),
+            (0.2675, 0.2565, 0.2761),
+        ),
+    ],
+)
+
+cifar100_transform_test = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Normalize(
+            (0.5071, 0.4867, 0.4408),
+            (0.2675, 0.2565, 0.2761),
+        ),
+    ],
+)
+
 class DataPreparer:
     class DatasetName(Enum):
-        MNIST = "MNIST"
-        FashionMNIST = "FashionMNIST"
-        CIFAR10 = "CIFAR10"
+        MNIST = "mnist"
+        FashionMNIST = "fashionmnist"
+        CIFAR10 = "cifar10"
+        CIFAR100 = "cifar100"
 
     train_transform_dict = {
-        "MNIST": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
-        "FashionMNIST": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
-        "CIFAR10": cifar10_transform_train,
+        "mnist": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
+        "fashionmnist": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
+        "cifar10": cifar10_transform_train,
+        "cifar100": cifar100_transform_train,
     }
 
     test_transform_dict = {
-        "MNIST": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
-        "FashionMNIST": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
-        "CIFAR10": cifar10_transform_test,
+        "mnist": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
+        "fashionmnist": transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]),
+        "cifar10": cifar10_transform_test,
+        "cifar100": cifar100_transform_test,
     }
 
     dataset_func = {
-        "MNIST": datasets.MNIST,
-        "FashionMNIST": datasets.FashionMNIST,
-        "CIFAR10": datasets.CIFAR10,
-    }
-
-    dataset_name = {
-        "mnist" : "MNIST",
-        "fashionmnist" : "FashionMNIST",
-        "cifar10" : "CIFAR10",
+        "mnist": datasets.MNIST,
+        "fashionmnist": datasets.FashionMNIST,
+        "cifar10": datasets.CIFAR10,
+        "cifar100": datasets.CIFAR100,
     }
 
     def __init__(self,args ,world_size = 1, rank = 0):
-        if args.dataset.lower() in self.dataset_name:
+        if args.dataset.lower() in self.train_transform_dict:
             self.init_common_dataset(args , world_size, rank)
         elif args.dataset.lower() == "imagenet":
             self.init_imagenet_dataset(args)
         else:
-            raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets are: {list(self.dataset_name.keys())}")
+            raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets are: {list(self.train_transform_dict.keys())}")
 
     def init_common_dataset(self, args , world_size = 1, rank = 0):
-        dataset_name = self.dataset_name[args.dataset.lower()]
+        dataset_name = args.dataset.lower()
         train_transform = self.train_transform_dict[dataset_name]
         test_transform = self.test_transform_dict[dataset_name]
         print(f"Using dataset: {dataset_name}, data path: {args.data_path}")
-        train_dataset = self.dataset_func[dataset_name](args.data_path, train=True, download=False, transform=train_transform)
-        test_dataset = self.dataset_func[dataset_name](args.data_path, train=False, download=False, transform=test_transform)
+        train_dataset = self.dataset_func[dataset_name](args.data_path, train=True, download=True, transform=train_transform)
+        test_dataset = self.dataset_func[dataset_name](args.data_path, train=False, download=True, transform=test_transform)
         self.num_classes = len(train_dataset.classes)
         
         self.train_sampler = None 

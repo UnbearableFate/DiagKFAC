@@ -4,9 +4,9 @@ current_time=$(date "+%Y%m%d%H%M")
 python \
  main_local.py \
  --timestamp="$current_time" \
- --experiment-name="diag_kfac_local" \
+ --experiment-name="kfac" \
  --model='resnet18Cifar' \
- --dataset='cifar10' \
+ --dataset='cifar100' \
  --epochs 60 \
  --batch-size 256 \
  --opt adamw \
@@ -26,7 +26,7 @@ python \
  --auto-augment ta_wide \
  --val-resize-size 224 \
  --workers 8 \
- --preconditioner diag_kfac \
+ --preconditioner kfac \
  --kfac-factor-update-steps 10 \
  --kfac-inv-update-steps 100 \
  --kfac-damping 0.003 \

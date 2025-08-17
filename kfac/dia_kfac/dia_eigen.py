@@ -51,7 +51,7 @@ class DiaEigenLayer(KFACEigenLayer):
             symmetry_aware=symmetry_aware,
             prediv_eigenvalues=False,
             tdc=tdc,
-            allreduce_method=AllreduceMethod.ALLREDUCE_BUCKETED,
+            allreduce_method=allreduce_method,
             name=name,
         )
 

@@ -2,7 +2,7 @@
 
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=16:mpiprocs=1
+#PBS -l select=8:mpiprocs=1
 #PBS -l walltime=01:30:00
 #PBS -j oe
 #PBS -m abe
@@ -10,6 +10,10 @@
 # --- Safety & strict mode ---
 set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
+
+# --- Profiling (Nsight Systems) ---
+# Dedicated NSYS profiling script. Customize arguments via NSYS_ARGS env var if needed.
+NSYS_ARGS=${NSYS_ARGS:-"--trace=cuda,cublas,cudnn,nvtx,osrt,mpi,ucx --sample=cpu --cpuctxsw=process-tree --force-overwrite=true --mpi-impl=openmpi"}
 
 # --- Cluster topology ---
 : "${PBS_NODEFILE:?PBS_NODEFILE is not set}"
@@ -34,7 +38,7 @@ done
 # --- Paths ---
 timestamp=$(date "+%Y%m%d%H%M%S")
 WORKSPACE="/work/xg24i002/x10041/DiagKFAC"
-script_path="$WORKSPACE/main.py"
+script_path="$WORKSPACE/main_file.py"
 PYTHON_ROOT=/work/xg24i002/x10041/miniconda3/envs/diagkfac/bin
 LOG_ROOT="$WORKSPACE/logs/imagenet_${timestamp}"
 mkdir -p "$LOG_ROOT"
@@ -49,35 +53,31 @@ echo "LOG_ROOT=$LOG_ROOT"
 run_exp() {
   local exp_name="$1"        # e.g. kfac / diag_kfac
   local precond="$2"         # e.g. kfac / diag_kfac
-  shift 2
-  local extra_args=("$@")    # any extra args
 
   echo "==== [${exp_name}] $(date) ===="
 
   if mpirun \
     --mca mpi_abort_print_stack 1 \
     --report-bindings \
-    "${PYTHON_ROOT}/torchrun" \
-      --rdzv-backend=c10d \
-      --rdzv-endpoint="${MASTER_ADDR}:${MASTER_PORT}" \
-      --nnodes="${NNODES}" \
-      --nproc-per-node="${NPROC_PER_NODE}" \
-      --node-rank="${NODE_RANK}" \
-      "${script_path}" \
-      --timestamp="${timestamp}" \
-      --experiment-name="${exp_name}" \
-      --model='resnet50' \
-      --dataset='imagenet' \
-      --epochs 3 \
-      --opt adamw \
-      --clip-grad-norm 5.0 \
-      --amp \
-      --preconditioner "${precond}" \
-      --kfac-factor-update-steps 10 \
-      --kfac-inv-update-steps 100 \
-      --kfac-damping 0.001 \
-      --kfac-kl-clip 0.001 \
-      "${extra_args[@]}"; then
+    bash -lc "\
+      set -euo pipefail; \
+      nsys profile ${NSYS_ARGS} \
+        -o \"${LOG_ROOT}/${exp_name}_nsys_rank\${OMPI_COMM_WORLD_RANK}\" \
+        ${PYTHON_ROOT}/python \
+          \"${script_path}\" \
+          --timestamp=\"${timestamp}\" \
+          --experiment-name=\"${exp_name}\" \
+          --model='resnet18Cifar' \
+          --dataset='cifar10' \
+          --epochs 20 \
+          --opt adamw \
+          --clip-grad-norm 5.0 \
+          --amp \
+          --preconditioner \"${precond}\" \
+          --kfac-factor-update-steps 2 \
+          --kfac-inv-update-steps 10 \
+          --kfac-damping 0.001 \
+          --kfac-kl-clip 0.001"; then
     echo "ok" > "${LOG_ROOT}/${exp_name}.SUCCESS"
     echo "==== [${exp_name}] DONE $(date) ===="
   else
@@ -87,12 +87,12 @@ run_exp() {
 }
 
 # --- Runs ---
-run_exp "kfac" "kfac"
+#run_exp "kfac" "kfac"
 run_exp "diag_kfac" "diag_kfac"
 
 # --- Summary ---
 status=0
-for exp in kfac diag_kfac; do
+for exp in diag_kfac; do
   if [[ -f "${LOG_ROOT}/${exp}.SUCCESS" ]]; then
     echo "[SUMMARY] ${exp}: SUCCESS"
   else

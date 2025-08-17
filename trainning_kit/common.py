@@ -26,7 +26,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--data-path", default=None, type=str, help="dataset path")
     parser.add_argument("--model", default=None, type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu; default: cuda)")
-    parser.add_argument("-b", "--batch-size", default=512, type=int, help="images per gpu, total batch size = NGPU x batch_size")
+    parser.add_argument("-b", "--batch-size", default=256, type=int, help="images per gpu, total batch size = NGPU x batch_size")
     parser.add_argument("--epochs", default=90, type=int, metavar="N", help="number of total epochs to run")
     parser.add_argument("-j", "--workers", default=16, type=int, metavar="N", help="number of data loading workers (default: 16)")
     parser.add_argument("--opt", default="sgd", type=str, help="optimizer")
@@ -81,7 +81,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--checkpoint-format", default="checkpoint_{epoch}.pth.tar", help="checkpoint file format")
     parser.add_argument("--no-cuda", action="store_true", default=False, help="disable CUDA training")
     parser.add_argument("--seed", type=int, default=42, metavar="S", help="random seed (default: 42)")
-    parser.add_argument("--val-batch-size", type=int, default=128, help="validation batch size (default: 128)")
+    parser.add_argument("--val-batch-size", type=int, default=256, help="validation batch size (default: 128)")
     parser.add_argument("--batches-per-allreduce", type=int, default=1, help="number of local batches before allreduce")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="frequency of saving checkpoints (in epochs)")
     
@@ -146,7 +146,7 @@ def merged_args_parser(add_help=True):
     
     args.workspace_path = WORKSPACE_ROOT[current_system]
 
-    args.experiment_name = f"{args.experiment_name}_{args.opt}_{args.preconditioner if args.preconditioner else 'none'}"
+    args.experiment_name = f"{args.preconditioner if args.preconditioner else 'none'}_{args.opt}_{args.experiment_name}"
 
     os.chdir(args.workspace_path)
     return args

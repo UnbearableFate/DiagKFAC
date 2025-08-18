@@ -90,6 +90,7 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         update_factors_in_hook: bool = True,
         loglevel: int = logging.DEBUG,
         split_num: int = 4,
+        epochs: int = 100,
     ) -> None:
         """Init KFACPreconditioner.
 
@@ -328,8 +329,10 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
             loglevel=loglevel,
         )
 
+        self.epochs = epochs
+
     @torch.no_grad()
-    def step(self) -> None:
+    def step(self, epoch=0) -> None:
         """Perform one K-FAC step.
 
         Note:
@@ -387,7 +390,7 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         # Compute Preconditioned Gradients
         for name, layer in reversed(list(self._layers.values())):
             if self._assignment.is_grad_worker(name):
-                layer.preconditioned_grad(damping=self.damping)
+                layer.preconditioned_grad(mix_rate=self._grad_mix_rate(epoch))
             if self._assignment.broadcast_gradients():
                 layer.broadcast_grad(
                     src=self._assignment.src_grad_worker(name),
@@ -403,6 +406,10 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         self._steps += 1
         self._mini_steps = defaultdict(int)
 
+    def _grad_mix_rate(self, epoch):
+        base = 0.4
+        max_rate = 0.8
+        return base + (max_rate - base) * epoch / self.epochs
 
 def register_modules(
     model: torch.nn.Module,

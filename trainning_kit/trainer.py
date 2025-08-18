@@ -288,6 +288,7 @@ class Trainer:
                 skip_layers=args.kfac_skip_layers,
                 compute_eigenvalue_outer_product=False,
                 split_num=4,
+                epochs=args.epochs,  # Pass epochs to preconditioner
             )
 
         def get_lambda(
@@ -473,7 +474,10 @@ class Trainer:
             if scaler is not None:
                 scaler.scale(loss).backward()
                 if self.preconditioner is not None:
-                    self.preconditioner.step()
+                    if args.preconditioner == "diag_kfac":
+                        self.preconditioner.step(epoch)
+                    else:
+                        self.preconditioner.step()
                     self.preconditioner_scheduler.step()
 
                 # Unscale before any grad norm computation / clipping
@@ -501,7 +505,10 @@ class Trainer:
             else:
                 loss.backward()
                 if self.preconditioner is not None:
-                    self.preconditioner.step()
+                    if args.preconditioner == "diag_kfac":
+                        self.preconditioner.step(epoch)
+                    else:
+                        self.preconditioner.step()
                     self.preconditioner_scheduler.step()
                 if args.clip_grad_norm is not None:
                     nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)

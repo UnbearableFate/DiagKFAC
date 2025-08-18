@@ -65,7 +65,7 @@ run_exp() {
       --node-rank="${NODE_RANK}" \
       "${script_path}" \
       --timestamp="${timestamp}" \
-      --experiment-name="Aug18_e10" \
+      --experiment-name="Aug18_why_slow" \
       --model='resnet18Cifar' \
       --dataset='cifar10' \
       --epochs "${epochs}" \
@@ -79,7 +79,7 @@ run_exp() {
       --kfac-factor-update-steps 10 \
       --kfac-inv-update-steps 100 \
       --kfac-damping 0.003 \
-      --kfac-kl-clip 0.001 \
+      --kfac-kl-clip 0.002 \
       --amp \
       ; then
     echo "ok" > "${LOG_ROOT}/${opt}_${precond}_${epochs}.SUCCESS"
@@ -91,7 +91,7 @@ run_exp() {
 }
 
 # --- Runs ---
-run_exp "adamw" "none" 100
-run_exp "adamw" "kfac" 43
-run_exp "adamw" "diag_kfac" 49
-run_exp "adafisher" "none" 56
+#run_exp "adamw" "none" 100
+run_exp "adamw" "kfac" 47
+#run_exp "adamw" "diag_kfac" 49
+#run_exp "adafisher" "none" 56

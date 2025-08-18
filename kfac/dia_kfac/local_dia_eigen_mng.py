@@ -507,7 +507,7 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             ), "g_inv_local must match module weights size"
             """
 
-    def preconditioned_grad(self, damping: float = 0.001) -> None:
+    def preconditioned_grad(self, mix_rate=0.5) -> None:
         """Compute precondition gradient of each weight in module.
 
         Preconditioned gradients can be applied to the actual gradients with
@@ -523,6 +523,7 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         grad = grad.to(self.inv_dtype)
         # self.grad = (self.g_inv @ grad @ self.a_inv).to(grad_type)
         self.grad = self.g_inv_local @ grad @ self.a_inv_local
-        self.grad = self.grad.to(grad_type)
+        # self.grad = self.grad.to(grad_type)
         # self.grad.add_(grad).mul_(0.5).to(dtype=grad_type)
+        self.grad.mul_(mix_rate).add_(grad, alpha=1 - mix_rate).to(dtype=grad_type)
         return

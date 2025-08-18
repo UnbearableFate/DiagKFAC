@@ -463,7 +463,7 @@ class DiaEigenLayer(KFACEigenLayer):
         super().compute_a_inv(damping=damping)
         # Gather each block's qa and da into self.qa_gathered and self.da_gathered
         inv_vals = 1.0 / (self.da + damping)  # (k,)
-        F = self.qa.mul_(inv_vals.unsqueeze(0))  # 先克隆，再对每列 in-place 缩放
+        F = self.qa.clone().mul_(inv_vals.unsqueeze(0))  # 先克隆，再对每列 in-place 缩放
         self.a_inv_local = torch.mm(F, self.qa.t())  # 整体乘一次
         self.qa = None
         self.da = None
@@ -488,8 +488,9 @@ class DiaEigenLayer(KFACEigenLayer):
         # self.g_inv_local = MinMaxNormalization(self.g_inv_local)
         if self.split_out and self.tp_group is not None:
             self.all_gather_g_inv_tensors()
-
+    
     def preconditioned_grad(self, damping: float = 0.001) -> None:
+        raise NotImplementedError("preconditioned_grad is not implemented")
         """Compute precondition gradient of each weight in module.
 
         Preconditioned gradients can be applied to the actual gradients with

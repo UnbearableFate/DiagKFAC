@@ -79,7 +79,7 @@ run_exp() {
           --clip-grad-norm 5.0 \
           --amp \
           --preconditioner \"${precond}\" \
-          --kfac-factor-update-steps 1 \
+          --kfac-factor-update-steps 10 \
           --kfac-inv-update-steps 10 \
           --kfac-damping 0.001 \
           --kfac-kl-clip 0.001"; then
@@ -92,12 +92,13 @@ run_exp() {
 }
 
 # --- Runs ---
-run_exp "kfac" "kfac"
+#run_exp "adamw" "none"
+#run_exp "kfac" "kfac"
 run_exp "diag_kfac" "diag_kfac"
 
 # --- Summary ---
 status=0
-for exp in kfac diag_kfac; do
+for exp in diag_kfac; do
   if [[ -f "${LOG_ROOT}/${exp}.SUCCESS" ]]; then
     echo "[SUMMARY] ${exp}: SUCCESS"
   else

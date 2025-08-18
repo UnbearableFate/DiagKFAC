@@ -106,7 +106,7 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--timestamp", type=str, default=datetime.datetime.now().strftime('%Y%m%d_%H%M'), help="experiment timestamp")
     parser.add_argument("--experiment-name", type=str, default="cifar10_resnet", help="experiment name")
     parser.add_argument("--recover", action="store_true", default=False, help="recover from checkpoint")
-    parser.add_argument("--preconditioner", type=str, default="none",choices=["kfac", "diag_kfac"], help="use preconditioner")
+    parser.add_argument("--preconditioner", type=str, default="none",choices=["kfac", "diag_kfac","none"], help="use preconditioner")
     parser.add_argument("--degree-noniid", type=float, default=0, help="degree of non-iid data distribution")
     parser.add_argument(
         "--dataset",

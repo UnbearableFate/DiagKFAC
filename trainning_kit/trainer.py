@@ -116,9 +116,8 @@ class Trainer:
         model_name = type(self.model).__name__ if not self.args.distributed else self.model_without_ddp.__class__.__name__
         log_dir  = os.path.join(args.workspace_path,"logs",
                                 f"{model_name}_{args.dataset}",
-                                args.experiment_name,
+                                f"{args.opt}_{args.preconditioner}_{args.experiment_name}",
                                 args.timestamp)
-        
         summary_writer = SummaryWriter(log_dir) 
         
         print(f"==== Training Configuration Summary ====")
@@ -263,7 +262,7 @@ class Trainer:
                 kl_clip=args.kfac_kl_clip,
                 lr=lambda x: self.optimizer.param_groups[0]['lr'],
                 accumulation_steps=args.batches_per_allreduce,
-                allreduce_bucket_cap_mb=50,
+                allreduce_bucket_cap_mb=25,
                 colocate_factors=args.kfac_colocate_factors,
                 compute_method=kfac.enums.ComputeMethod.EIGEN,
                 grad_worker_fraction=kfac.enums.DistributedStrategy.COMM_OPT,
@@ -281,7 +280,7 @@ class Trainer:
                 kl_clip=args.kfac_kl_clip,
                 lr=lambda x: self.optimizer.param_groups[0]['lr'],
                 accumulation_steps=args.batches_per_allreduce,
-                allreduce_bucket_cap_mb=50,
+                allreduce_bucket_cap_mb=25,
                 colocate_factors=args.kfac_colocate_factors,
                 compute_method=kfac.enums.ComputeMethod.EIGEN,
                 grad_worker_fraction=kfac.enums.DistributedStrategy.COMM_OPT,

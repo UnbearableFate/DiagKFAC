@@ -309,30 +309,28 @@ class DiaEigenLayer(KFACEigenLayer):
             return  # No input to save for this rank
 
         if isinstance(self.module, LinearModuleHelper):
-            # 线性层分块
-            a = (
-                input_[0][..., self.input_chunk_start : self.input_chunk_end]
-                .to(self.factor_dtype)
-                .clone()
-                .contiguous()
-            )
-            a = a.view(-1, a.size(-1))
+            a = input_[0][..., self.input_chunk_start : self.input_chunk_end]
+            # 避免不必要的拷贝：只有在 dtype 不匹配时才转换
+            if a.dtype != self.factor_dtype:
+                a = a.to(self.factor_dtype)
+            # 使用 reshape 更鲁棒，必要时内部才会拷贝；若可视图则零拷贝
+            a = a.reshape(-1, a.size(-1))
             if self.module.has_bias() and self.chunk_rank == self.grp_size - 1:
                 a = append_bias_ones(a)
             a = get_cov(a)
         elif isinstance(self.module, Conv2dModuleHelper):
-            # 卷积层分块（通道分块）
-            x = input_[0].to(self.factor_dtype)
-            # 只取当前rank负责的输入通道
-            x = (
-                x[:, self.input_chunk_start : self.input_chunk_end, ...]
-                .clone()
-                .contiguous()
-            )
+            x = input_[0][:, self.input_chunk_start : self.input_chunk_end, ...]
+            # 仅在需要时转换 dtype
+            if x.dtype != self.factor_dtype:
+                x = x.to(self.factor_dtype)
+            # 若提取 kernel 需要连续内存，则按需 contiguous
+            if not x.is_contiguous():
+                x = x.contiguous()
             # 提取patches
             a = self.module._extract_patches(x)
             spatial_size = a.size(1) * a.size(2)
-            a = a.view(-1, a.size(-1))
+            # 使用 reshape 以避免强制要求连续
+            a = a.reshape(-1, a.size(-1))
             if self.module.has_bias() and self.chunk_rank == self.grp_size - 1:
                 a = append_bias_ones(a)
             a = a / spatial_size
@@ -465,9 +463,7 @@ class DiaEigenLayer(KFACEigenLayer):
         super().compute_a_inv(damping=damping)
         # Gather each block's qa and da into self.qa_gathered and self.da_gathered
         inv_vals = 1.0 / (self.da + damping)  # (k,)
-        F = self.qa.clone().mul_(
-            inv_vals.unsqueeze(0)
-        )  # 先克隆，再对每列 in-place 缩放
+        F = self.qa.mul_(inv_vals.unsqueeze(0))  # 先克隆，再对每列 in-place 缩放
         self.a_inv_local = torch.mm(F, self.qa.t())  # 整体乘一次
         self.qa = None
         self.da = None

@@ -26,7 +26,7 @@ python \
  --auto-augment ta_wide \
  --val-resize-size 224 \
  --workers 8 \
- --preconditioner kfac \
+ --preconditioner diag_kfac \
  --kfac-factor-update-steps 10 \
  --kfac-inv-update-steps 100 \
  --kfac-damping 0.003 \

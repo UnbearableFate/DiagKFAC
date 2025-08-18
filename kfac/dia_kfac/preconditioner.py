@@ -361,48 +361,28 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         if self.steps % self.inv_update_steps == 0:
             for name, layer in reversed(list(self._layers.values())):
                 layer: LocalDiaEigenLayerManager  # 类型注释
-                if not layer.split_in:
-                    if get_rank() == self._assignment.inv_worker(name, "A"):
-                        layer.compute_a_inv(damping=self.damping)
-                    layer.broadcast_a_inv(
-                        src=self._assignment.inv_worker(name, "A"),
-                        group=None,
-                    )
-                else:
-                    for sub_layer in layer.sub_layers:
-                        if sub_layer.input_chunk_end == sub_layer.input_chunk_start:
-                            continue
-                        if get_rank() == self._assignment.inv_worker(name, "A"):
-                            sub_layer.compute_a_inv(damping=self.damping)
-                        sub_layer.broadcast_a_inv(
-                            src=self._assignment.inv_worker(name, "A"),
-                            group=None,
-                        )
-                if not layer.split_out:
-                    if get_rank() == self._assignment.inv_worker(name, "G"):
-                        layer.compute_g_inv(damping=self.damping)
-                    layer.broadcast_g_inv(
-                        src=self._assignment.inv_worker(name, "G"),
-                        group=None,
-                    )
-                else:
-                    for sub_layer in layer.sub_layers:
-                        if get_rank() == self._assignment.inv_worker(name, "G"):
-                            sub_layer.compute_g_inv(damping=self.damping)
-                        sub_layer.broadcast_g_inv(
-                            src=self._assignment.inv_worker(name, "G"),
-                            group=None,
-                        )
+                if get_rank() == self._assignment.inv_worker(name, "A"):
+                    layer.compute_a_inv(damping=self.damping)
+                layer.broadcast_a_inv(
+                    src=self._assignment.inv_worker(name, "A"),
+                    group=None,
+                )
+
+                if get_rank() == self._assignment.inv_worker(name, "G"):
+                    layer.compute_g_inv(damping=self.damping)
+                layer.broadcast_g_inv(
+                    src=self._assignment.inv_worker(name, "G"),
+                    group=None,
+                )
+
             self._tdc.flush_allreduce_buckets()
-            
+
             for name, layer in reversed(list(self._layers.values())):
                 layer: LocalDiaEigenLayerManager  # 类型注释
                 if layer.split_in:
-                    layer.a_inv_local = torch.block_diag(*[sub_layer.a_inv_local for sub_layer in layer.sub_layers])
-                    layer.a_inv_local.add_(self.damping)
+                    layer.assemble_a_inv_from_flattened(damping=self.damping)
                 if layer.split_out:
-                    layer.g_inv_local = torch.block_diag(*[sub_layer.g_inv_local for sub_layer in layer.sub_layers])
-                    layer.g_inv_local.add_(self.damping)
+                    layer.assemble_g_inv_from_flattened(damping=self.damping)
 
         # Compute Preconditioned Gradients
         for name, layer in reversed(list(self._layers.values())):

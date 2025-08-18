@@ -78,6 +78,8 @@ class DiaEigenLayer(KFACEigenLayer):
 
         self.split_in = True if split_end in [SplitEnd.IN, SplitEnd.BOTH] else False
         self.split_out = True if split_end in [SplitEnd.OUT, SplitEnd.BOTH] else False
+        self.a_factor_split_start_end = []
+        self.g_factor_split_start_end = []
         self.compute_chunk_setting(chunk_rank=chunk_rank, group_size=group_size)
 
         print(
@@ -85,8 +87,9 @@ class DiaEigenLayer(KFACEigenLayer):
             f"input chunk start={self.input_chunk_start}, end={self.input_chunk_end}",
             f"output chunk start={self.output_chunk_start}, end={self.output_chunk_end}",
             f"a_factor_width={self.a_factor_width}, g_factor_width={self.g_factor_width}",
+            f"a factor start end {self.a_factor_split_start_end}, g factor start end {self.g_factor_split_start_end}",
         )
-    
+
     @property
     def a_inv_local(self) -> torch.Tensor | None:
         """Get eigen vectors of A."""
@@ -110,6 +113,22 @@ class DiaEigenLayer(KFACEigenLayer):
     def g_inv_local(self, value: torch.Tensor | FutureType | None) -> None:
         """Set eigen vectors of G."""
         self._g_inv_local = value
+
+    def has_a_block(self) -> bool:
+        """Check if the layer has an A block."""
+        return (
+            self.split_in
+            and self.a_factor_width > 0
+            and self.input_chunk_end - self.input_chunk_start > 0
+        )
+
+    def has_g_block(self) -> bool:
+        """Check if the layer has a G block."""
+        return (
+            self.split_out
+            and self.g_factor_width > 0
+            and self.output_chunk_end - self.output_chunk_start > 0
+        )
 
     def compute_chunk_setting(self, chunk_rank: int, group_size: int = 2) -> None:
         """
@@ -143,7 +162,7 @@ class DiaEigenLayer(KFACEigenLayer):
                 )
             else:
                 self.output_chunk_start, self.output_chunk_end = 0, out_features
-                self.g_factor_width = out_features
+                self.g_factor_width = self.module.g_factor_shape[0]
             return
 
         in_features = self.module.module.weight.shape[1]
@@ -159,9 +178,7 @@ class DiaEigenLayer(KFACEigenLayer):
             #     f"TODO: Input features {self.in_features} must be divisible by a_factor_width {self.a_factor_width}."
         else:
             self.input_chunk_start, self.input_chunk_end = 0, in_features
-            self.a_factor_width = (
-                in_features + 1 if self.module.has_bias() else in_features
-            )
+            self.a_factor_width = self.module.a_factor_shape[0]
 
         if self.split_out:
             self._setup_output_chunk(
@@ -171,11 +188,12 @@ class DiaEigenLayer(KFACEigenLayer):
             #     f"TODO: Output features {self.out_features} must be divisible by g_factor_width {self.g_factor_width}."
         else:
             self.output_chunk_start, self.output_chunk_end = 0, out_features
-            self.g_factor_width = out_features
+            self.g_factor_width = self.module.g_factor_shape[0]
 
     def _setup_input_chunk(self, chunk_rank, group_size, in_features, device, dtype):
         # 计算所有chunk的a_factor_width
         all_a_factor_widths = []
+        a_factor_split_start_end = []
         for rank in range(group_size):
             start, end = self.get_chunk_start_end(rank, group_size, in_features)
 
@@ -199,6 +217,21 @@ class DiaEigenLayer(KFACEigenLayer):
                 self.input_chunk_start, self.input_chunk_end = start, end
                 self.a_factor_width = a_factor_width
 
+            if rank == 0:
+                a_factor_split_start_end.append((0, a_factor_width))
+            else:
+                a_factor_split_start_end.append(
+                    (
+                        a_factor_split_start_end[-1][1],
+                        a_factor_split_start_end[-1][1] + a_factor_width,
+                    )
+                )
+
+        self.a_factor_split_start_end = a_factor_split_start_end
+        assert (
+            self.a_factor_split_start_end[-1][1] == self.module.a_factor_shape[0]
+        ), f"Expected {self.module.a_factor_shape[0]}, but got {self.a_factor_split_start_end[-1][1]}"
+
         # 初始化a_inv_gathered
         if self.a_inv_gathered is None:
             self.a_inv_gathered = []
@@ -210,6 +243,7 @@ class DiaEigenLayer(KFACEigenLayer):
     def _setup_output_chunk(self, chunk_rank, group_size, out_features, device, dtype):
         # 计算所有chunk的g_factor_width
         all_g_factor_widths = []
+        g_factor_split_start_end = []
         for rank in range(group_size):
             start, end = self.get_chunk_start_end(rank, group_size, out_features)
             g_factor_width = end - start
@@ -217,6 +251,21 @@ class DiaEigenLayer(KFACEigenLayer):
             if rank == chunk_rank:
                 self.output_chunk_start, self.output_chunk_end = start, end
                 self.g_factor_width = g_factor_width
+
+            if rank == 0:
+                g_factor_split_start_end.append((0, g_factor_width))
+            else:
+                g_factor_split_start_end.append(
+                    (
+                        g_factor_split_start_end[-1][1],
+                        g_factor_split_start_end[-1][1] + g_factor_width,
+                    )
+                )
+
+        self.g_factor_split_start_end = g_factor_split_start_end
+        assert (
+            self.g_factor_split_start_end[-1][1] == self.module.g_factor_shape[0]
+        ), f"Expected {self.module.g_factor_shape[0]}, but got {self.g_factor_split_start_end[-1][1]}"
 
         # 初始化g_inv_gathered
         if self.g_inv_gathered is None:
@@ -536,7 +585,7 @@ class DiaEigenLayer(KFACEigenLayer):
                 device=self.module.device,
                 dtype=self.inv_dtype,
             )
-        
+
         self.a_inv_local = self.tdc.broadcast(  # type: ignore
             self.a_inv_local,
             src=src,

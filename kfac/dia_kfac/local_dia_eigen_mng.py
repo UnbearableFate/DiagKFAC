@@ -246,11 +246,12 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             f"g_inv_local_flattened must be Tensor | Future | None, got {type(value)}"
         )
 
+    """
     def save_layer_input(self, input_: list[torch.Tensor]) -> None:
         if not self.split_in:
             super().save_layer_input(input_)
             return
-        """Save input for layer, but only use the slice corresponding to this rank."""
+        '''Save input for layer, but only use the slice corresponding to this rank.'''
 
         for sub_layer in self.sub_layers:
             sub_layer.save_layer_input(input_)
@@ -269,6 +270,7 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             return
         for sub_layer in self.sub_layers:
             sub_layer.update_a_factor(alpha=alpha)
+    
 
     def update_g_factor(self, alpha: float = 0.95) -> None:
         if not self.split_out:
@@ -292,6 +294,7 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         for sub_layer in self.sub_layers:
             if sub_layer.g_factor_width > 0:
                 sub_layer.reduce_g_factor(group=group)
+    """
 
     def broadcast_a_inv(
         self,
@@ -467,7 +470,15 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             self.da = None
         else:
             for sub_layer in self.sub_layers:
+                start = sub_layer.a_factor_split_start_end[sub_layer.chunk_rank][0]
+                end = sub_layer.a_factor_split_start_end[sub_layer.chunk_rank][1]
+                sub_layer.a_factor = self.a_factor[start:end, start:end]
+                assert sub_layer.a_factor.shape == (
+                    sub_layer.a_factor_width,
+                    sub_layer.a_factor_width,
+                ), f"a_factor must be square {sub_layer.a_factor.shape}, {sub_layer.a_factor_width}"
                 sub_layer.compute_a_inv(damping=damping)
+
             """
             self.a_inv_local = torch.block_diag(
                 *[sub_layer.a_inv_local for sub_layer in self.sub_layers]
@@ -492,7 +503,15 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
             self.dg = None
         else:
             for sub_layer in self.sub_layers:
+                start = sub_layer.g_factor_split_start_end[sub_layer.chunk_rank][0]
+                end = sub_layer.g_factor_split_start_end[sub_layer.chunk_rank][1]
+                sub_layer.g_factor = self.g_factor[start:end, start:end]
+                assert sub_layer.g_factor.shape == (
+                    sub_layer.g_factor_width,
+                    sub_layer.g_factor_width,
+                ), f"g_factor must be square {sub_layer.g_factor.shape}, {sub_layer.g_factor_width}"
                 sub_layer.compute_g_inv(damping=damping)
+
             """
             self.g_inv_local = torch.block_diag(
                 *[sub_layer.g_inv_local for sub_layer in self.sub_layers]

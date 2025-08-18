@@ -300,6 +300,7 @@ class DiaEigenLayer(KFACEigenLayer):
         return start, end
 
     def save_layer_input(self, input_: list[torch.Tensor]) -> None:
+        raise NotImplementedError("don't reach here, save_layer_input in dia_eigen")
         if not self.split_in:
             super().save_layer_input(input_)
             return
@@ -347,6 +348,9 @@ class DiaEigenLayer(KFACEigenLayer):
             self._a_count += 1
 
     def save_layer_grad_output(self, grad_output: tuple[torch.Tensor, ...]) -> None:
+        raise NotImplementedError(
+            "don't reach here, save_layer_grad_output in dia_eigen"
+        )
         if not self.split_out:
             super().save_layer_grad_output(grad_output)
             return

@@ -17,3 +17,4 @@ if dist.get_rank() == 0:
 mgr = Trainer(args)
 dist.barrier()  # Ensure all processes are synchronized before starting training
 mgr.train_and_evaluate()
+dist.destroy_process_group() 

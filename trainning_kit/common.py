@@ -146,7 +146,7 @@ def merged_args_parser(add_help=True):
     
     args.workspace_path = WORKSPACE_ROOT[current_system]
 
-    args.experiment_name = f"{args.preconditioner if args.preconditioner else 'none'}_{args.opt}_{args.experiment_name}"
+    #args.experiment_name = f"{args.preconditioner if args.preconditioner else 'none'}_{args.opt}_{args.experiment_name}"
 
     os.chdir(args.workspace_path)
     return args

@@ -2,10 +2,10 @@
 
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=16:mpiprocs=1
-#PBS -l walltime=01:30:00
+#PBS -l select=8:mpiprocs=1
+#PBS -l walltime=00:30:00
 #PBS -j oe
-#PBS -m abe
+#PBS -m ae
 
 # --- Safety & strict mode ---
 set -eEuo pipefail
@@ -36,7 +36,7 @@ timestamp=$(date "+%Y%m%d%H%M%S")
 WORKSPACE="/work/xg24i002/x10041/DiagKFAC"
 script_path="$WORKSPACE/main.py"
 PYTHON_ROOT=/work/xg24i002/x10041/miniconda3/envs/diagkfac/bin
-LOG_ROOT="$WORKSPACE/logs/${timestamp}"
+LOG_ROOT="$WORKSPACE/logs/cifar100_${timestamp}"
 mkdir -p "$LOG_ROOT"
 
 export MASTER_PORT MASTER_ADDR
@@ -47,12 +47,12 @@ echo "LOG_ROOT=$LOG_ROOT"
 
 # --- Helper: run one mpirun/torchrun job with logging & marker ---
 run_exp() {
-  local exp_name="$1"        # e.g. kfac / diag_kfac
+  local opt="$1"    # e.g. adamw / sgd
   local precond="$2"         # e.g. kfac / diag_kfac
-  shift 2
-  local extra_args=("$@")    # any extra args
+  local epochs="$3"         # e.g. 90
+  shift 3
 
-  echo "==== [${exp_name}] $(date) ===="
+  echo "==== [${opt}_${precond}] $(date) ===="
 
   if mpirun \
     --mca mpi_abort_print_stack 1 \
@@ -65,39 +65,33 @@ run_exp() {
       --node-rank="${NODE_RANK}" \
       "${script_path}" \
       --timestamp="${timestamp}" \
-      --experiment-name="${exp_name}" \
-      --model='resnet50' \
-      --dataset='imagenet' \
-      --epochs 3 \
-      --opt adamw \
+      --experiment-name="multi_node_time_statistics" \
+      --model='resnet34Cifar' \
+      --dataset='cifar100' \
+      --epochs "${epochs}" \
+      --batch-size 256 \
+      --opt "${opt}" \
+      --lr 0.001 \
+      --weight-decay 0.001  \
       --clip-grad-norm 5.0 \
-      --amp \
+      --workers 16 \
       --preconditioner "${precond}" \
       --kfac-factor-update-steps 10 \
       --kfac-inv-update-steps 100 \
-      --kfac-damping 0.001 \
-      --kfac-kl-clip 0.001 \
-      "${extra_args[@]}"; then
-    echo "ok" > "${LOG_ROOT}/${exp_name}.SUCCESS"
-    echo "==== [${exp_name}] DONE $(date) ===="
+      --kfac-damping 0.003 \
+      --kfac-kl-clip 0.002 \
+      --amp \
+      ; then
+    echo "ok" > "${LOG_ROOT}/${opt}_${precond}_${epochs}.SUCCESS"
+    echo "==== [${opt}_${precond}_${epochs}] DONE $(date) ===="
   else
-    echo "[ERROR] ${exp_name} FAILED" >&2
+    echo "[ERROR] ${opt}_${precond}_${epochs} FAILED" >&2
     exit 1
   fi
 }
 
 # --- Runs ---
-run_exp "kfac" "kfac"
-run_exp "diag_kfac" "diag_kfac"
-
-# --- Summary ---
-status=0
-for exp in kfac diag_kfac; do
-  if [[ -f "${LOG_ROOT}/${exp}.SUCCESS" ]]; then
-    echo "[SUMMARY] ${exp}: SUCCESS"
-  else
-    echo "[SUMMARY] ${exp}: MISSING SUCCESS MARKER" >&2
-    status=1
-  fi
-done
-exit $status
+run_exp "adamw" "none" 100
+run_exp "adamw" "kfac" 51
+run_exp "adamw" "diag_kfac" 70
+run_exp "adafisher" "none" 79

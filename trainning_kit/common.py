@@ -100,7 +100,11 @@ def merged_args_parser(add_help=True):
     parser.add_argument("--kfac-colocate-factors", action="store_true", default=True, help="compute A and G for a layer on the same worker")
     parser.add_argument("--kfac-strategy", type=str, default="comm-opt", help="KFAC communication strategy (comm-opt, mem-opt, or hybrid_opt)")
     parser.add_argument("--kfac-grad-worker-fraction", type=float, default=0.25, help="fraction of workers for gradient computation in HYBRID_OPT")
-    
+
+    # ---adafisher相关参数---
+    parser.add_argument("--gamma", type=float, default=0.8, help="gamma for AdaFisher (default: 0.8)")
+    parser.add_argument("--lamb", type=float, default=1e-3, help="lambda for AdaFisher (default: 1e-3)")
+
     # ------ 分布式和实验相关参数 ------
     parser.add_argument("--local_rank", type=int, default=0, help="local rank for distributed training")
     parser.add_argument("--timestamp", type=str, default=datetime.datetime.now().strftime('%Y%m%d_%H%M'), help="experiment timestamp")

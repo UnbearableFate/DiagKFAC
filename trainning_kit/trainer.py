@@ -246,6 +246,8 @@ class Trainer:
                 self.model,
                 lr=args.lr,
                 weight_decay=args.weight_decay,
+                gamma=args.gamma,
+                Lambda=args.lamb,
                 dist=args.distributed,
             )
         elif opt_name == "adafisherw":
@@ -253,6 +255,8 @@ class Trainer:
                 self.model,
                 lr=args.lr,
                 weight_decay=args.weight_decay,
+                gamma=args.gamma,
+                Lambda=args.lamb,
                 dist=args.distributed,
             )
         else:
@@ -281,7 +285,7 @@ class Trainer:
                 max_lr=args.lr,
                 total_steps=args.epochs * len(self.data_manager.train_loader),
                 pct_start=args.pct_start,
-                cycle_momentum=False if opt_name == "adafisher" else True,
+                cycle_momentum=False if opt_name.startswith("adafisher") else True,
             )
             args.lr_warmup_epochs = 0
         else:
@@ -407,9 +411,17 @@ class Trainer:
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
-            epoch_start_time = time.perf_counter_ns()
+            # Ensure previous GPU work is done before starting epoch timer
+            epoch_start_time = time.time()
             metric_logger = self.train_function(epoch)
-            self.train_total_time += time.perf_counter_ns() - epoch_start_time
+            self.train_total_time += time.time() - epoch_start_time
+            # Average the per-epoch delta across ranks (if distributed)
+            
+            if self.args.distributed:
+                t = torch.tensor([self.train_total_time], dtype=torch.float32, device=self.device)
+                dist.all_reduce(t, op=dist.ReduceOp.SUM)
+                self.train_total_time = t.item() / self.world_size
+            
             self.write_training_summary(epoch, metric_logger)
             if args.lr_scheduler != "onecycle":
                 self.lr_scheduler.step()
@@ -449,12 +461,12 @@ class Trainer:
         if hasattr(self, "config_path"):
             with open(self.config_path, "a") as f:
                 f.write(f"Training completed at {datetime.datetime.now()}\n")
-                f.write(f"training_time: {self.train_total_time/1e9}s \n")
+                f.write(f"training_time: {self.train_total_time} \n")
                 f.write(
-                    f"train time / epoch: {self.train_total_time/1e9 / args.epochs}s \n"
+                    f"train time / epoch: {self.train_total_time / args.epochs} \n"
                 )
                 f.write(
-                    f"max cuda memory: {torch.cuda.max_memory_allocated() / 1e9} GB\n"
+                    f"max cuda memory: {torch.cuda.max_memory_allocated() / (1024 ** 3)} GB\n"
                 )
 
         print(
@@ -514,11 +526,7 @@ class Trainer:
             )
 
         metric_logger.synchronize_between_processes()
-        if self.args.distributed:
-            temp_tensor = torch.tensor(self.train_total_time, device=self.device)
-            dist.all_reduce(temp_tensor, op=dist.ReduceOp.SUM)
-            self.train_total_time = temp_tensor.item() / self.world_size
-
+        
         if self.summary_writer is not None:
             self.summary_writer.add_scalar(
                 f"Test/acc1{log_suffix}_vs_epoch", metric_logger.acc1.global_avg, epoch
@@ -529,12 +537,12 @@ class Trainer:
             self.summary_writer.add_scalar(
                 f"Test/acc1{log_suffix}_vs_time",
                 metric_logger.acc1.global_avg,
-                self.train_total_time / 1e9,
+                self.train_total_time * 1000,
             )
             self.summary_writer.add_scalar(
                 f"Test/acc5{log_suffix}_vs_time",
                 metric_logger.acc5.global_avg,
-                self.train_total_time / 1e9,
+                self.train_total_time * 1000,
             )
             print(
                 f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}"

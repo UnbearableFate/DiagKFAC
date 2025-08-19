@@ -2,10 +2,10 @@
 
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=16:mpiprocs=1
-#PBS -l walltime=01:30:00
+#PBS -l select=8:mpiprocs=1
+#PBS -l walltime=02:00:00
 #PBS -j oe
-#PBS -m abe
+#PBS -m ae
 
 # --- Safety & strict mode ---
 set -eEuo pipefail
@@ -47,12 +47,12 @@ echo "LOG_ROOT=$LOG_ROOT"
 
 # --- Helper: run one mpirun/torchrun job with logging & marker ---
 run_exp() {
-  local exp_name="$1"        # e.g. kfac / diag_kfac
+  local opt="$1"    # e.g. adamw / sgd
   local precond="$2"         # e.g. kfac / diag_kfac
-  shift 2
-  local extra_args=("$@")    # any extra args
+  local epochs="$3"         # e.g. 90
+  shift 3
 
-  echo "==== [${exp_name}] $(date) ===="
+  echo "==== [${opt}_${precond}] $(date) ===="
 
   if mpirun \
     --mca mpi_abort_print_stack 1 \
@@ -65,39 +65,35 @@ run_exp() {
       --node-rank="${NODE_RANK}" \
       "${script_path}" \
       --timestamp="${timestamp}" \
-      --experiment-name="${exp_name}" \
-      --model='resnet50' \
-      --dataset='imagenet' \
-      --epochs 3 \
-      --opt adamw \
+      --experiment-name="multi_node_time_statistics" \
+      --model='swin_s' \
+      --dataset='cifar100' \
+      --epochs "${epochs}" \
+      --batch-size 256 \
+      --opt "${opt}" \
+      --lr 0.001 \
+      --weight-decay 0.001  \
       --clip-grad-norm 5.0 \
-      --amp \
+      --workers 16 \
       --preconditioner "${precond}" \
-      --kfac-factor-update-steps 10 \
-      --kfac-inv-update-steps 100 \
-      --kfac-damping 0.001 \
-      --kfac-kl-clip 0.001 \
-      "${extra_args[@]}"; then
-    echo "ok" > "${LOG_ROOT}/${exp_name}.SUCCESS"
-    echo "==== [${exp_name}] DONE $(date) ===="
+      --kfac-factor-update-steps 12 \
+      --kfac-inv-update-steps 128 \
+      --kfac-damping 0.0022 \
+      --kfac-kl-clip 0.0018 \
+      --gamma 0.8 \
+      --lamb 3e-3 \
+      --amp \
+      ; then
+    echo "ok" > "${LOG_ROOT}/${opt}_${precond}_${epochs}.SUCCESS"
+    echo "==== [${opt}_${precond}_${epochs}] DONE $(date) ===="
   else
-    echo "[ERROR] ${exp_name} FAILED" >&2
+    echo "[ERROR] ${opt}_${precond}_${epochs} FAILED" >&2
     exit 1
   fi
 }
 
 # --- Runs ---
-run_exp "kfac" "kfac"
-run_exp "diag_kfac" "diag_kfac"
-
-# --- Summary ---
-status=0
-for exp in kfac diag_kfac; do
-  if [[ -f "${LOG_ROOT}/${exp}.SUCCESS" ]]; then
-    echo "[SUMMARY] ${exp}: SUCCESS"
-  else
-    echo "[SUMMARY] ${exp}: MISSING SUCCESS MARKER" >&2
-    status=1
-  fi
-done
-exit $status
+run_exp "adamw" "none" 200
+run_exp "adamw" "kfac" 107
+run_exp "adafisherw" "none" 137
+run_exp "adamw" "diag_kfac" 114

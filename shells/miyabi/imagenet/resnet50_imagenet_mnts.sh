@@ -2,8 +2,8 @@
 
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=8:mpiprocs=1
-#PBS -l walltime=00:30:00
+#PBS -l select=16:mpiprocs=1
+#PBS -l walltime=01:30:00
 #PBS -j oe
 #PBS -m ae
 
@@ -36,7 +36,7 @@ timestamp=$(date "+%Y%m%d%H%M%S")
 WORKSPACE="/work/xg24i002/x10041/DiagKFAC"
 script_path="$WORKSPACE/main.py"
 PYTHON_ROOT=/work/xg24i002/x10041/miniconda3/envs/diagkfac/bin
-LOG_ROOT="$WORKSPACE/logs/cifar10_${timestamp}"
+LOG_ROOT="$WORKSPACE/logs/${timestamp}"
 mkdir -p "$LOG_ROOT"
 
 export MASTER_PORT MASTER_ADDR
@@ -65,9 +65,9 @@ run_exp() {
       --node-rank="${NODE_RANK}" \
       "${script_path}" \
       --timestamp="${timestamp}" \
-      --experiment-name="Aug18_why_slow" \
-      --model='resnet18Cifar' \
-      --dataset='cifar10' \
+      --experiment-name="multi_node_time_statistics_1" \
+      --model='resnet50' \
+      --dataset='imagenet' \
       --epochs "${epochs}" \
       --batch-size 256 \
       --opt "${opt}" \
@@ -91,7 +91,6 @@ run_exp() {
 }
 
 # --- Runs ---
-#run_exp "adamw" "none" 100
-run_exp "adamw" "kfac" 47
-#run_exp "adamw" "diag_kfac" 49
-#run_exp "adafisher" "none" 56
+# run_exp "adamw" "none" 10
+run_exp "adamw" "kfac" 10
+run_exp "adamw" "diag_kfac" 10

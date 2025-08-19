@@ -36,7 +36,7 @@ timestamp=$(date "+%Y%m%d%H%M%S")
 WORKSPACE="/work/xg24i002/x10041/DiagKFAC"
 script_path="$WORKSPACE/main.py"
 PYTHON_ROOT=/work/xg24i002/x10041/miniconda3/envs/diagkfac/bin
-LOG_ROOT="$WORKSPACE/logs/cifar100_${timestamp}"
+LOG_ROOT="$WORKSPACE/logs/cifar10_${timestamp}"
 mkdir -p "$LOG_ROOT"
 
 export MASTER_PORT MASTER_ADDR
@@ -65,9 +65,9 @@ run_exp() {
       --node-rank="${NODE_RANK}" \
       "${script_path}" \
       --timestamp="${timestamp}" \
-      --experiment-name="Aug18" \
-      --model='resnet34Cifar' \
-      --dataset='cifar100' \
+      --experiment-name="multi_node_time_statistics" \
+      --model='resnet18Cifar' \
+      --dataset='cifar10' \
       --epochs "${epochs}" \
       --batch-size 256 \
       --opt "${opt}" \
@@ -92,6 +92,6 @@ run_exp() {
 
 # --- Runs ---
 #run_exp "adamw" "none" 100
-run_exp "adamw" "kfac" 46
-run_exp "adamw" "diag_kfac" 43
-#run_exp "adafisher" "none" 54
+run_exp "adamw" "kfac" 29
+run_exp "adamw" "diag_kfac" 45
+run_exp "adafisher" "none" 52

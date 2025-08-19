@@ -82,6 +82,7 @@ class DiaEigenLayer(KFACEigenLayer):
         self.g_factor_split_start_end = []
         self.compute_chunk_setting(chunk_rank=chunk_rank, group_size=group_size)
 
+        """
         print(
             f"DiaEigen {self.name} initialized with split_end={split_end}, A shape {self.module.a_factor_shape}, G shape {self.module.g_factor_shape}",
             f"input chunk start={self.input_chunk_start}, end={self.input_chunk_end}",
@@ -89,6 +90,7 @@ class DiaEigenLayer(KFACEigenLayer):
             f"a_factor_width={self.a_factor_width}, g_factor_width={self.g_factor_width}",
             f"a factor start end {self.a_factor_split_start_end}, g factor start end {self.g_factor_split_start_end}",
         )
+        """
 
     @property
     def a_inv_local(self) -> torch.Tensor | None:
@@ -463,7 +465,9 @@ class DiaEigenLayer(KFACEigenLayer):
         super().compute_a_inv(damping=damping)
         # Gather each block's qa and da into self.qa_gathered and self.da_gathered
         inv_vals = 1.0 / (self.da + damping)  # (k,)
-        F = self.qa.clone().mul_(inv_vals.unsqueeze(0))  # 先克隆，再对每列 in-place 缩放
+        F = self.qa.clone().mul_(
+            inv_vals.unsqueeze(0)
+        )  # 先克隆，再对每列 in-place 缩放
         self.a_inv_local = torch.mm(F, self.qa.t())  # 整体乘一次
         self.qa = None
         self.da = None
@@ -488,7 +492,7 @@ class DiaEigenLayer(KFACEigenLayer):
         # self.g_inv_local = MinMaxNormalization(self.g_inv_local)
         if self.split_out and self.tp_group is not None:
             self.all_gather_g_inv_tensors()
-    
+
     def preconditioned_grad(self, damping: float = 0.001) -> None:
         raise NotImplementedError("preconditioned_grad is not implemented")
         """Compute precondition gradient of each weight in module.

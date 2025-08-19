@@ -454,6 +454,24 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
 
         self.g_inv_local = torch.block_diag(*blocks).add_(damping)
 
+    def merge_inv_local(self, damping: float = 0.001) -> None:
+        if self.split_in:
+            self.a_inv_local = torch.block_diag(
+                *[sub_layer.a_inv_local for sub_layer in self.sub_layers]
+            )
+            self.a_inv_local.add_(damping)
+            assert (
+                self.a_inv_local.shape == self.module.a_factor_shape
+            ), "a_inv_local must match module weights size"
+        if self.split_out:
+            self.g_inv_local = torch.block_diag(
+                *[sub_layer.g_inv_local for sub_layer in self.sub_layers]
+            )
+            self.g_inv_local.add_(damping)
+            assert (
+                self.g_inv_local.shape == self.module.g_factor_shape
+            ), "g_inv_local must match module weights size"
+
     def compute_a_inv(self, damping: float = 0.001) -> None:
         if not self.split_in:
             super().compute_a_inv(damping=damping)

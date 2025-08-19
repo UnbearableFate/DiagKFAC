@@ -274,13 +274,37 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
                 f"Unknown assignment_strategy={self.assignment_strategy}",
             )
 
-        work = {
-            name: {
-                "A": cost_func(kfac_layer.module.a_factor_shape[0]),
-                "G": cost_func(kfac_layer.module.g_factor_shape[0]),
+        # 计算基于分块的工作负载
+        work = {}
+        for name, kfac_layer in kfac_layers.values():
+            layer: LocalDiaEigenLayerManager = kfac_layer
+
+            # 计算A因子的总工作负载（所有子块的工作负载之和）
+            a_total_work = 0
+            if layer.split_in and len(layer.sub_layers) > 0:
+                # 分块情况：累加所有子块的工作负载
+                for sub_layer in layer.sub_layers:
+                    if sub_layer.has_a_block():
+                        a_total_work += cost_func(sub_layer.a_factor_width)
+            else:
+                # 不分块情况：使用原始形状
+                a_total_work = cost_func(layer.module.a_factor_shape[0])
+
+            # 计算G因子的总工作负载（所有子块的工作负载之和）
+            g_total_work = 0
+            if layer.split_out and len(layer.sub_layers) > 0:
+                # 分块情况：累加所有子块的工作负载
+                for sub_layer in layer.sub_layers:
+                    if sub_layer.has_g_block():
+                        g_total_work += cost_func(sub_layer.g_factor_width)
+            else:
+                # 不分块情况：使用原始形状
+                g_total_work = cost_func(layer.module.g_factor_shape[0])
+
+            work[name] = {
+                "A": a_total_work,
+                "G": g_total_work,
             }
-            for name, kfac_layer in kfac_layers.values()
-        }
 
         new_group = cast(
             Callable[[List[int]], dist.ProcessGroup],
@@ -366,26 +390,33 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
                 layer: LocalDiaEigenLayerManager  # 类型注释
                 if get_rank() == self._assignment.inv_worker(name, "A"):
                     layer.compute_a_inv(damping=self.damping)
-                layer.broadcast_a_inv(
-                    src=self._assignment.inv_worker(name, "A"),
-                    group=None,
-                )
+
+                if get_world_size() > 1:
+                    layer.broadcast_a_inv(
+                        src=self._assignment.inv_worker(name, "A"),
+                        group=None,
+                    )
 
                 if get_rank() == self._assignment.inv_worker(name, "G"):
                     layer.compute_g_inv(damping=self.damping)
-                layer.broadcast_g_inv(
-                    src=self._assignment.inv_worker(name, "G"),
-                    group=None,
-                )
+
+                if get_world_size() > 1:
+                    layer.broadcast_g_inv(
+                        src=self._assignment.inv_worker(name, "G"),
+                        group=None,
+                    )
 
             self._tdc.flush_allreduce_buckets()
 
             for name, layer in reversed(list(self._layers.values())):
                 layer: LocalDiaEigenLayerManager  # 类型注释
-                if layer.split_in:
-                    layer.assemble_a_inv_from_flattened(damping=self.damping)
-                if layer.split_out:
-                    layer.assemble_g_inv_from_flattened(damping=self.damping)
+                if get_world_size() > 1:
+                    if layer.split_in:
+                        layer.assemble_a_inv_from_flattened(damping=self.damping)
+                    if layer.split_out:
+                        layer.assemble_g_inv_from_flattened(damping=self.damping)
+                else:
+                    layer.merge_inv_local()
 
         # Compute Preconditioned Gradients
         for name, layer in reversed(list(self._layers.values())):
@@ -410,6 +441,7 @@ class DiagKFACPreconditioner(BaseKFACPreconditioner):
         base = 0.4
         max_rate = 0.8
         return base + (max_rate - base) * epoch / self.epochs
+
 
 def register_modules(
     model: torch.nn.Module,

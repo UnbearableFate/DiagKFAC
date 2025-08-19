@@ -8,11 +8,10 @@ mpirun --host fern02,fern01 \
  -np 2 -map-by ppr:1:node \
  -x MASTER_ADDR -x MASTER_PORT \
  /home/yu/miniconda3/envs/py313/bin/python \
- main.py \
+ main_mpi.py \
  --timestamp="$current_time" \
  --experiment-name="kfac_test_norm" \
  --model='resnet18Cifar' \
- --layers=18 \
  --dataset='cifar10' \
  --epochs 50 \
  --batch-size 256 \

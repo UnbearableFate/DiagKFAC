@@ -5,7 +5,7 @@ python \
  main_local.py \
  --timestamp="$current_time" \
  --experiment-name="kfac" \
- --model='resnet18Cifar' \
+ --model='densenet121Cifar' \
  --dataset='cifar100' \
  --epochs 60 \
  --batch-size 256 \

@@ -9,7 +9,7 @@ from costom_modules.image_classification import (
     get_network as create_image_classification_model,
 )
 import kfac
-from optimizers.AdaFisher import AdaFisher
+from optimizers.AdaFisher import AdaFisher, AdaFisherW
 from trainning_kit import presets
 import torch
 from trainning_kit import utils
@@ -243,6 +243,13 @@ class Trainer:
             )
         elif opt_name == "adafisher":
             optimizer = AdaFisher(
+                self.model,
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+                dist=args.distributed,
+            )
+        elif opt_name == "adafisherw":
+            optimizer = AdaFisherW(
                 self.model,
                 lr=args.lr,
                 weight_decay=args.weight_decay,

@@ -56,14 +56,14 @@ class LocalDiaEigenLayerManager(KFACEigenLayer):
         self.split_in = split_end in [SplitEnd.IN, SplitEnd.BOTH]
         self.split_out = split_end in [SplitEnd.OUT, SplitEnd.BOTH]
 
-        if self.split_in and self.module.a_factor_shape[0] // split_num < 8:
+        if self.split_in and self.module.a_factor_shape[0] // split_num < 8 or self.module.module.weight.shape[1] // split_num <= 1:
             print(
-                f"Disabling split_in at layer {self.name} because a factor shape {self.module.a_factor_shape[0]} // {split_num} < 8"
+                f"Disabling split_in at layer {self.name} because a factor shape small"
             )
             self.split_in = False
-        if self.split_out and self.module.g_factor_shape[0] // split_num < 8:
+        if self.split_out and self.module.g_factor_shape[0] // split_num < 8 or self.module.module.weight.shape[0] // split_num <= 1:
             print(
-                f"Disabling split_out at layer {self.name} because g factor shape {self.module.g_factor_shape[0]} // {split_num} < 8"
+                f"Disabling split_out at layer {self.name} because g factor shape small"
             )
             self.split_out = False
 

@@ -4,7 +4,8 @@ as resnet50_cifar, ResNet101 as resnet101_cifar, ResNet152 as resnet152_cifar)
 from .densenet import (densenet121, densenet161, densenet169, densenet201)
 from .densenet_cifar import (DenseNet121 as densenet121_cifar, DenseNet161 as densenet161_cifar,DenseNet169
 as densenet169_cifar, DenseNet201 as densenet201_cifar)
-from .swin import (swin_t, swin_s, swin_b, swin_l)
+#from .swin import (swin_t, swin_s, swin_b, swin_l)
+from .my_swin import (swin_t, swin_s, swin_b,)
 from .cct import cct
 from .focalnet import FocalNet
 from .mobilenetv3 import mobilenetv3
@@ -54,8 +55,6 @@ def get_network(name: str, num_classes: int, **kwargs) -> Module | None:
             num_classes=num_classes, **kwargs) if name == 'swin_s' else\
         swin_b(
             num_classes=num_classes, **kwargs) if name == 'swin_b' else\
-        swin_l(
-            num_classes=num_classes, **kwargs) if name == 'swin_l' else \
         cct(
             num_classes=num_classes, **kwargs) if name == 'cct' else \
         FocalNet(

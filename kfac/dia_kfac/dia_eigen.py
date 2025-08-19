@@ -361,7 +361,7 @@ class DiaEigenLayer(KFACEigenLayer):
             g = grad_output[0][..., self.output_chunk_start : self.output_chunk_end].to(
                 self.factor_dtype
             )
-            g = g.view(-1, g.size(-1))
+            g = g.reshape(-1, g.size(-1))
             if self.grad_scaler is not None:
                 g = g / self.grad_scaler()
             g = get_cov(g)
@@ -523,7 +523,7 @@ class DiaEigenLayer(KFACEigenLayer):
                     "make sure to call backward() before this method."
                 )
             if modu.has_bias():
-                g = torch.cat([g, modu.module.bias.main_grad.view(-1, 1)], 1)  # type: ignore
+                g = torch.cat([g, modu.module.bias.main_grad.reshape(-1, 1)], 1)  # type: ignore
             return g
         '''
 

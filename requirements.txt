@@ -3,3 +3,4 @@ einops
 tensorboard
 timm
 scipy
+nvidia-ml-py3

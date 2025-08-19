@@ -116,7 +116,8 @@ class Trainer:
         model_name = type(self.model).__name__ if not self.args.distributed else self.model_without_ddp.__class__.__name__
         log_dir  = os.path.join(args.workspace_path,"logs",
                                 f"{model_name}_{args.dataset}",
-                                f"{args.opt}_{args.preconditioner}_{args.experiment_name}",
+                                args.experiment_name,
+                                f"{args.opt}_{args.preconditioner}_{args.epochs}",
                                 args.timestamp)
         summary_writer = SummaryWriter(log_dir) 
         
@@ -175,11 +176,9 @@ class Trainer:
             custom_keys_weight_decay=custom_keys_weight_decay if len(custom_keys_weight_decay) > 0 else None,
         )
 
-        """
         if self.world_size > 1:
             args.lr = args.lr * math.sqrt(self.world_size)
             args.lr_min = args.lr_min * math.sqrt(self.world_size)
-        """
 
         opt_name = args.opt.lower()
         if opt_name.startswith("sgd"):
@@ -339,9 +338,10 @@ class Trainer:
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
-            epoch_start_time = time.time()
-            self.train_function(epoch)
-            self.train_total_time += time.time() - epoch_start_time
+            epoch_start_time = time.perf_counter_ns()
+            metric_logger = self.train_function(epoch)
+            self.train_total_time += time.perf_counter_ns() - epoch_start_time
+            self.write_training_summary(epoch, metric_logger)
             if args.lr_scheduler != "onecycle":
                 self.lr_scheduler.step()
             self.evaluate(epoch=epoch)
@@ -367,6 +367,14 @@ class Trainer:
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        
+        if hasattr(self, "config_path"):
+            with open(self.config_path, "a") as f:
+                f.write(f"Training completed at {datetime.datetime.now()}\n")
+                f.write(f"training_time: {self.train_total_time/1e9}s \n")
+                f.write(f"train time / epoch: {self.train_total_time/1e9 / args.epochs}s \n")
+                f.write(f"max cuda memory: {torch.cuda.max_memory_allocated() / 1e9} GB\n")
+        
         print(f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {self.rank}")
 
     def test_only(self):
@@ -420,7 +428,11 @@ class Trainer:
             )
 
         metric_logger.synchronize_between_processes()
-        
+        if self.args.distributed:
+            temp_tensor = torch.tensor(self.train_total_time,device=self.device)
+            dist.all_reduce(temp_tensor, op=dist.ReduceOp.SUM)
+            self.train_total_time = temp_tensor.item() / self.world_size
+
         if self.summary_writer is not None:
             self.summary_writer.add_scalar(
                 f"Test/acc1{log_suffix}_vs_epoch", metric_logger.acc1.global_avg, epoch
@@ -429,10 +441,10 @@ class Trainer:
                 f"Test/acc5{log_suffix}_vs_epoch", metric_logger.acc5.global_avg, epoch
             )
             self.summary_writer.add_scalar(
-                f"Test/acc1{log_suffix}_vs_time", metric_logger.acc1.global_avg, self.train_total_time
+                f"Test/acc1{log_suffix}_vs_time", metric_logger.acc1.global_avg, self.train_total_time / 1e9 
             )
             self.summary_writer.add_scalar(
-                f"Test/acc5{log_suffix}_vs_time", metric_logger.acc5.global_avg, self.train_total_time
+                f"Test/acc5{log_suffix}_vs_time", metric_logger.acc5.global_avg, self.train_total_time / 1e9
             )
             print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
         
@@ -542,7 +554,7 @@ class Trainer:
             metric_logger.meters["grad_norm"].update(grad_norm_val)
             metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
-        self.write_training_summary(epoch, metric_logger)
+        return metric_logger
 
     def write_training_summary(self, epoch, metric_logger):
         if self.summary_writer is not None:
@@ -600,5 +612,4 @@ class Trainer:
                 except Exception:
                     pass
 
-            self.summary_writer.add_scalar(f"Train/max_allocate_memory", torch.cuda.max_memory_allocated() / 1024.0 / 1024.0, epoch)
             self.summary_writer.add_scalar(f"Train/img_per_second", metric_logger.meters["img/s"].global_avg, epoch)

@@ -2,7 +2,8 @@ import os
 import yaml
 import datetime
 import argparse
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass
 
 
@@ -151,6 +152,29 @@ class YAMLConfigParser:
     
     def __init__(self):
         self.default_config = DefaultConfig()
+        # 科学计数法正则表达式模式
+        self.scientific_notation_pattern = re.compile(r'^[+-]?(\d+\.?\d*|\.\d+)[eE][+-]?\d+$')
+        
+    def convert_scientific_notation(self, value: Any) -> Any:
+        """递归地将科学计数法字符串转换为浮点数"""
+        if isinstance(value, str):
+            # 检查是否匹配科学计数法模式
+            if self.scientific_notation_pattern.match(value):
+                try:
+                    return float(value)
+                except ValueError:
+                    # 如果转换失败，返回原始字符串
+                    return value
+            return value
+        elif isinstance(value, dict):
+            # 递归处理字典
+            return {k: self.convert_scientific_notation(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            # 递归处理列表
+            return [self.convert_scientific_notation(item) for item in value]
+        else:
+            # 其他类型直接返回
+            return value
         
     def load_yaml_config(self, config_path: str) -> Dict[str, Any]:
         """加载YAML配置文件"""
@@ -159,6 +183,10 @@ class YAMLConfigParser:
             
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
+            
+        # 转换科学计数法
+        if config:
+            config = self.convert_scientific_notation(config)
             
         return config or {}
     

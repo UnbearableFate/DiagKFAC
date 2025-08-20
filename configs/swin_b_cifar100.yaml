@@ -3,7 +3,7 @@
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'swin_b'
+  model: 'swin_t'
   dataset: 'cifar100'
   
   # 训练参数
@@ -19,7 +19,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  experiment_name: "swin_b_multi_node"
+  unified_experiment_name: "swin_b_multi_node"
 
 # 优化器配置
 optimizers:
@@ -30,6 +30,7 @@ optimizers:
     opt: 'adafisherw'
     gamma: 0.8
     lamb: 3e-3
+    weight_decay: 0.01
 
 # 预条件器配置
 preconditioners:
@@ -40,30 +41,30 @@ preconditioners:
     preconditioner: 'kfac'
     kfac_factor_update_steps: 12
     kfac_inv_update_steps: 128
-    kfac_damping: 0.0028
-    kfac_kl_clip: 0.0018
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
     kfac_factor_decay: 0.95
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
     kfac_factor_update_steps: 12
     kfac_inv_update_steps: 128
-    kfac_damping: 0.0028
-    kfac_kl_clip: 0.0018
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
 
 # 实验定义
 experiments:
   - name: "swin_b_adamw_kfac_87"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 87
+    epochs: 1
     
   - name: "swin_b_adafisherw_none_109"
     <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 109
+    epochs: 1
     
   - name: "swin_b_adamw_diag_kfac_113"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 113
+    epochs: 1
     
   # 额外的基准实验
   - name: "swin_b_adamw_none_200"

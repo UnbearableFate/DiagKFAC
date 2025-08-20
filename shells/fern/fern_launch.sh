@@ -9,5 +9,5 @@ mpirun --host fern02,fern01 \
  -x MASTER_ADDR -x MASTER_PORT \
  /home/yu/miniconda3/envs/py313/bin/python \
  main.py \
- --config configs/resnet18_cifar10.yaml \
- --experiment-name "adamw"
+ --config configs/swin_b_cifar100.yaml \
+ --experiment-name "swin_b_adamw_diag_kfac_113"

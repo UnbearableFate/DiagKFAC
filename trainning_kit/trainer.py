@@ -167,11 +167,12 @@ class Trainer:
             args.workspace_path,
             "logs",
             f"{model_name}_{args.dataset}",
-            args.experiment_name,
+            args.unified_experiment_name,
             f"{args.opt}_{args.preconditioner}_{args.epochs}",
             args.timestamp,
         )
         summary_writer = SummaryWriter(log_dir)
+        self.log_dir = log_dir
 
         print(f"==== Training Configuration Summary ====")
         config_lines = []
@@ -551,6 +552,10 @@ class Trainer:
                 f.write(
                     f"max cuda memory: {torch.cuda.max_memory_allocated() / (1024 ** 3)} GB\n"
                 )
+        
+        if hasattr(self, "log_dir") and self.args.config:
+            # copy config file to log_dir
+            os.system(f"cp {self.args.config} {self.log_dir}")
 
         print(
             f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {self.rank}"

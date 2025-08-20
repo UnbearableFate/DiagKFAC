@@ -1,0 +1,65 @@
+# Swin Transformer CIFAR-100 实验配置
+# 对应原始脚本中的多个实验
+
+# 基础配置 - 所有实验共享
+base_config: &base_config
+  # 模型和数据集
+  model: 'swin_s'
+  dataset: 'cifar100'
+  batch_size: 256
+  workers: 16
+  
+  # 通用训练参数
+  lr: 0.001
+  weight_decay: 0.001
+  clip_grad_norm: 5.0
+  amp: true
+  
+  # 学习率调度
+  lr_scheduler: 'onecycle'
+  gamma: 0.8
+  
+  # 实验设置
+  experiment_name: "multi_node_time_statistics"
+
+# 实验配置列表
+experiments:
+  # 实验1: AdamW + None preconditioner
+  - name: "adamw"
+    <<: *base_config
+    opt: 'adamw'
+    preconditioner: 'none'
+    epochs: 200
+    
+  # 实验2: AdamW + KFAC preconditioner  
+  - name: "kfac"
+    <<: *base_config
+    opt: 'adamw'
+    preconditioner: 'kfac'
+    epochs: 107
+    # KFAC 特定参数
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 128
+    kfac_damping: 0.0022
+    kfac_kl_clip: 0.0018
+    
+  # 实验3: AdaFisherW + None preconditioner
+  - name: "adafisherw"
+    <<: *base_config
+    opt: 'adafisherw'
+    preconditioner: 'none'
+    epochs: 137
+    # AdaFisher 特定参数
+    lamb: 3e-3
+    
+  # 实验4: AdamW + Diagonal KFAC preconditioner
+  - name: "diag_kfac"
+    <<: *base_config
+    opt: 'adamw'
+    preconditioner: 'diag_kfac'
+    epochs: 114
+    # Diagonal KFAC 特定参数
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 128
+    kfac_damping: 0.0022
+    kfac_kl_clip: 0.0018

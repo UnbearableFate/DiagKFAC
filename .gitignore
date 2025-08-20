@@ -45,7 +45,5 @@ Thumbs.db
 *.xls
 *.xlsx
 *.json
-*.yaml
-*.yml
 # Shell logs
 *.sh.*

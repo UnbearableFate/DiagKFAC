@@ -1,0 +1,71 @@
+# Swin-B CIFAR-100 多节点分布式训练实验配置
+
+# 基础配置模板
+base_config: &base_config
+  # 模型和数据集
+  model: 'swin_t'
+  dataset: 'cifar10'
+  
+  # 训练参数
+  batch_size: 256
+  lr: 0.001
+  weight_decay: 0.001
+  clip_grad_norm: 5.0
+  workers: 16
+  
+  # 技术设置
+  amp: true
+  device: 'cuda'
+  
+  # 日志和输出
+  print_freq: 100
+  unified_experiment_name: "single_node_test"
+
+# 优化器配置
+optimizers:
+  adamw: &adamw_config
+    opt: 'adamw'
+    
+  adafisherw: &adafisherw_config
+    opt: 'adafisherw'
+    gamma: 0.8
+    lamb: 3e-3
+    weight_decay: 0.01
+
+# 预条件器配置
+preconditioners:
+  none: &none_precond
+    preconditioner: 'none'
+    
+  kfac: &kfac_precond
+    preconditioner: 'kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 128
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
+    kfac_factor_decay: 0.95
+    
+  diag_kfac: &diag_kfac_precond
+    preconditioner: 'diag_kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
+
+# 实验定义
+experiments:
+  - name: "swin_b_adamw"
+    <<: [*base_config, *adamw_config, *none_precond]
+    epochs: 2
+
+  - name: "swin_b_kfac"
+    <<: [*base_config, *adamw_config, *kfac_precond]
+    epochs: 2
+    
+  - name: "swin_b_adafisherw"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 2
+
+  - name: "swin_b_diag_kfac"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    epochs: 2

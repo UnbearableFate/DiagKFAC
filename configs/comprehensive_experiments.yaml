@@ -1,0 +1,192 @@
+# 更全面的优化器对比实验配置
+# 包含各种优化器和预条件器的组合
+
+# 全局默认配置
+defaults: &defaults
+  # 基础设置
+  device: 'cuda'
+  amp: true
+  workers: 16
+  seed: 42
+  
+  # 数据增强
+  auto_augment: 'ta_wide'
+  mixup_alpha: 0.8
+  cutmix_alpha: 1.0
+  random_erase: 0.25
+  
+  # 训练设置
+  print_freq: 100
+  clip_grad_norm: 5.0
+  
+  # 学习率调度器默认设置
+  lr_scheduler: 'onecycle'
+  pct_start: 0.2
+  lr_min: 1e-5
+
+# 数据集特定配置
+datasets:
+  cifar10: &cifar10_config
+    <<: *defaults
+    dataset: 'cifar10'
+    val_crop_size: 32
+    train_crop_size: 32
+    
+  cifar100: &cifar100_config
+    <<: *defaults
+    dataset: 'cifar100'
+    val_crop_size: 32
+    train_crop_size: 32
+    
+  imagenet: &imagenet_config
+    <<: *defaults
+    dataset: 'imagenet'
+    val_crop_size: 224
+    train_crop_size: 224
+
+# 优化器特定配置
+optimizers:
+  sgd: &sgd_config
+    opt: 'sgd'
+    momentum: 0.9
+    
+  adamw: &adamw_config
+    opt: 'adamw'
+    
+  adafisher: &adafisher_config
+    opt: 'adafisher'
+    gamma: 0.8
+    lamb: 1e-3
+    
+  adafisherw: &adafisherw_config
+    opt: 'adafisherw'
+    gamma: 0.8
+    lamb: 3e-3
+    
+  adahessian: &adahessian_config
+    opt: 'adahessian'
+    
+  shampoo: &shampoo_config
+    opt: 'shampoo'
+    shampoo_damping: 1e-3
+    shampoo_preconditioner_upd_interval: 10
+    shampoo_curvature_update_interval: 10
+
+# 预条件器配置
+preconditioners:
+  none: &none_precond
+    preconditioner: 'none'
+    
+  kfac: &kfac_precond
+    preconditioner: 'kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 128
+    kfac_damping: 0.003
+    kfac_kl_clip: 0.001
+    kfac_factor_decay: 0.95
+    
+  diag_kfac: &diag_kfac_precond
+    preconditioner: 'diag_kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 128
+    kfac_damping: 0.0022
+    kfac_kl_clip: 0.0018
+
+# 实验配置模板
+experiment_templates:
+  # 快速测试模板
+  quick_test: &quick_test
+    epochs: 5
+    batch_size: 128
+    
+  # 小规模实验模板  
+  small_scale: &small_scale
+    epochs: 50
+    batch_size: 256
+    
+  # 中等规模实验模板
+  medium_scale: &medium_scale
+    epochs: 100
+    batch_size: 256
+    
+  # 大规模实验模板
+  large_scale: &large_scale
+    epochs: 200
+    batch_size: 512
+
+# 实际实验定义
+experiments:
+  # ResNet-18 CIFAR-10 对比实验
+  resnet18_cifar10_comparison:
+    - name: "resnet18_cifar10_sgd_baseline"
+      <<: [*cifar10_config, *sgd_config, *none_precond, *medium_scale]
+      model: 'resnet18'
+      lr: 0.1
+      
+    - name: "resnet18_cifar10_adamw_baseline"
+      <<: [*cifar10_config, *adamw_config, *none_precond, *medium_scale]
+      model: 'resnet18'
+      lr: 0.001
+      
+    - name: "resnet18_cifar10_adamw_kfac"
+      <<: [*cifar10_config, *adamw_config, *kfac_precond, *medium_scale]
+      model: 'resnet18'
+      lr: 0.001
+      
+  # Swin Transformer CIFAR-100 详细对比
+  swin_cifar100_detailed:
+    - name: "swin_s_cifar100_adamw_none"
+      <<: [*cifar100_config, *adamw_config, *none_precond]
+      model: 'swin_s'
+      epochs: 200
+      batch_size: 256
+      lr: 0.001
+      weight_decay: 0.001
+      
+    - name: "swin_s_cifar100_adamw_kfac"
+      <<: [*cifar100_config, *adamw_config, *kfac_precond]
+      model: 'swin_s'
+      epochs: 107
+      batch_size: 256
+      lr: 0.001
+      weight_decay: 0.001
+      kfac_damping: 0.0022
+      kfac_kl_clip: 0.0018
+      
+    - name: "swin_s_cifar100_adafisherw_none"
+      <<: [*cifar100_config, *adafisherw_config, *none_precond]
+      model: 'swin_s'
+      epochs: 137
+      batch_size: 256
+      lr: 0.001
+      weight_decay: 0.001
+      
+    - name: "swin_s_cifar100_adamw_diag_kfac"
+      <<: [*cifar100_config, *adamw_config, *diag_kfac_precond]
+      model: 'swin_s'
+      epochs: 114
+      batch_size: 256
+      lr: 0.001
+      weight_decay: 0.001
+      
+  # 优化器消融研究
+  optimizer_ablation:
+    - name: "ablation_sgd"
+      <<: [*cifar10_config, *sgd_config, *none_precond, *small_scale]
+      model: 'resnet18'
+      lr: 0.1
+      
+    - name: "ablation_adamw"
+      <<: [*cifar10_config, *adamw_config, *none_precond, *small_scale]
+      model: 'resnet18'
+      lr: 0.001
+      
+    - name: "ablation_adafisher"
+      <<: [*cifar10_config, *adafisher_config, *none_precond, *small_scale]
+      model: 'resnet18'
+      lr: 0.001
+      
+    - name: "ablation_shampoo"
+      <<: [*cifar10_config, *shampoo_config, *none_precond, *small_scale]
+      model: 'resnet18'
+      lr: 0.001

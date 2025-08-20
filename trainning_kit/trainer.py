@@ -156,6 +156,7 @@ class Trainer:
         else:
             self.train_function = self.train_one_epoch
         self.train_total_time = 0
+        print(f"init ok in {self.rank}")
 
     def init_logger(self, args):
         model_name = (
@@ -167,11 +168,12 @@ class Trainer:
             args.workspace_path,
             "logs",
             f"{model_name}_{args.dataset}",
-            args.experiment_name,
+            args.unified_experiment_name,
             f"{args.opt}_{args.preconditioner}_{args.epochs}",
             args.timestamp,
         )
         summary_writer = SummaryWriter(log_dir)
+        self.log_dir = log_dir
 
         print(f"==== Training Configuration Summary ====")
         config_lines = []
@@ -541,6 +543,7 @@ class Trainer:
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
 
+        """
         if hasattr(self, "config_path"):
             with open(self.config_path, "a") as f:
                 f.write(f"Training completed at {datetime.datetime.now()}\n")
@@ -551,7 +554,7 @@ class Trainer:
                 f.write(
                     f"max cuda memory: {torch.cuda.max_memory_allocated() / (1024 ** 3)} GB\n"
                 )
-
+        """
         print(
             f"Training time {total_time_str} ({total_time / args.epochs:.2f} s / epoch) at rank {self.rank}"
         )
@@ -1007,3 +1010,35 @@ class Trainer:
             self.summary_writer.add_scalar(
                 f"Train/img_per_second", metric_logger.meters["img/s"].global_avg, epoch
             )
+
+    def print_after_train(self):
+        if hasattr(self, "config_path"):
+            with open(self.config_path, "a") as f:
+                f.write(f"Training completed at {datetime.datetime.now()}\n")
+                f.write(f"training_time: {self.train_total_time} \n")
+                f.write(
+                    f"train time / epoch: {self.train_total_time / self.args.epochs} \n"
+                )
+                f.write(
+                    f"max cuda memory: {torch.cuda.max_memory_allocated() / (1024 ** 3)} GB\n"
+                )
+        if (
+            getattr(self, "log_dir", None) is not None
+            and getattr(self.args, "config", None) is not None
+        ):
+            from pathlib import Path
+            import shutil
+
+            src = Path(self.args.config)
+            try:
+                if src.is_file():
+                    dst = Path(self.log_dir) / src.name
+                    shutil.copy2(src, dst)
+                elif src.is_dir():
+                    dst = Path(self.log_dir) / src.name
+                    # Python ≥3.8: dirs_exist_ok prevents failure if rerun
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    print(f"[WARN] Config path does not exist: {src}")
+            except Exception as e:
+                print(f"[WARN] Failed to copy config to log_dir: {e}")

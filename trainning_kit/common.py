@@ -29,7 +29,9 @@ def merged_args_parser(add_help=True):
     parser.add_argument("-b", "--batch-size", default=256, type=int, help="images per gpu, total batch size = NGPU x batch_size")
     parser.add_argument("--epochs", default=90, type=int, metavar="N", help="number of total epochs to run")
     parser.add_argument("-j", "--workers", default=16, type=int, metavar="N", help="number of data loading workers (default: 16)")
-    parser.add_argument("--opt", default="sgd", type=str, help="optimizer")
+    parser.add_argument("--opt", default="sgd", type=str, 
+                       choices=["sgd", "adamw", "adafisher", "adafisherw", "adafactor", "adahessian", "shampoo"],
+                       help="optimizer (choices: sgd, adamw, adafisher, adafisherw, adafactor, adahessian, shampoo)")
     parser.add_argument("--lr", default=0.001, type=float, help="initial learning rate")
     parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
     parser.add_argument("--wd", "--weight-decay", default=0.03, type=float, metavar="W", help="weight decay (default: 1e-4)", dest="weight_decay")
@@ -104,6 +106,12 @@ def merged_args_parser(add_help=True):
     # ---adafisher相关参数---
     parser.add_argument("--gamma", type=float, default=0.8, help="gamma for AdaFisher (default: 0.8)")
     parser.add_argument("--lamb", type=float, default=1e-3, help="lambda for AdaFisher (default: 1e-3)")
+
+    # ---shampoo相关参数---
+    parser.add_argument("--shampoo-damping", type=float, default=1e-3, help="damping parameter for Shampoo (default: 1e-3)")
+    parser.add_argument("--shampoo-preconditioner-upd-interval", type=int, default=10, help="preconditioner update interval for Shampoo (default: 10)")
+    parser.add_argument("--shampoo-curvature-update-interval", type=int, default=10, help="curvature update interval for Shampoo (default: 10)")
+    parser.add_argument("--shampoo-ema-decay", type=float, default=-1, help="EMA decay for Shampoo statistics (-1 to disable, default: -1)")
 
     # ------ 分布式和实验相关参数 ------
     parser.add_argument("--local_rank", type=int, default=0, help="local rank for distributed training")

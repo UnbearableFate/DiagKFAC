@@ -26,12 +26,8 @@ python \
  --auto-augment ta_wide \
  --val-resize-size 224 \
  --workers 8 \
- --preconditioner diag_kfac \
- --kfac-factor-update-steps 10 \
- --kfac-inv-update-steps 100 \
- --kfac-damping 0.003 \
- --kfac-kl-clip 0.0015 \
- #--amp
- #--model-ema \
- #--ra-sampler \
- #--ra-reps 4 \
+ --amp \
+ --shampoo-damping 0.003 \
+ --shampoo-preconditioner-upd-interval 50 \
+ --shampoo-curvature-update-interval 10 \
+ --shampoo-ema-decay 0.95 \

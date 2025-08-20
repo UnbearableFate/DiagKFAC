@@ -28,6 +28,15 @@ from kfac.dia_kfac.preconditioner import DiagKFACPreconditioner
 import logging
 from torch.optim import Adafactor
 
+# Import for Shampoo optimizer
+try:
+    from asdl.precondition import PreconditioningConfig, ShampooGradientMaker
+    ASDL_AVAILABLE = True
+except ImportError:
+    ASDL_AVAILABLE = False
+    PreconditioningConfig = None
+    ShampooGradientMaker = None
+
 
 class Trainer:
     def __init__(self, args, model=None):
@@ -80,6 +89,12 @@ class Trainer:
         self.scaler = torch.amp.GradScaler("cuda") if args.amp else None
 
         self.optimizer, self.lr_scheduler = self.init_optimizer(args)
+        
+        # Initialize Shampoo gradient maker if needed
+        if args.opt.lower() == "shampoo" and ASDL_AVAILABLE:
+            self.gradient_maker = self.init_gradient_maker(args)
+        else:
+            self.gradient_maker = None
         
         # 检查AdaHessian与AMP的兼容性
         if isinstance(getattr(self, 'optimizer', None), Adahessian) and args.amp:
@@ -135,6 +150,9 @@ class Trainer:
         if isinstance(self.optimizer, Adahessian):
             self.train_function = self.train_one_epoch_adahessian
             print("Using specialized training function for AdaHessian optimizer")
+        elif self.gradient_maker is not None:
+            self.train_function = self.train_one_epoch_shampoo
+            print("Using specialized training function for Shampoo optimizer")
         else:
             self.train_function = self.train_one_epoch
         self.train_total_time = 0
@@ -173,6 +191,8 @@ class Trainer:
         config_lines.append(
             f"Preconditioner       : {str(self.preconditioner) if self.preconditioner else 'None'}"
         )
+        if self.gradient_maker is not None:
+            config_lines.append(f"Gradient Maker       : {type(self.gradient_maker).__name__}")
         config_lines.append(f"  - Learning Rate    : {args.lr}")
         config_lines.append(f"  - Weight Decay     : {args.weight_decay}")
         config_lines.append(
@@ -286,9 +306,19 @@ class Trainer:
                 lr=args.lr,
                 weight_decay=args.weight_decay,
             )
+        elif opt_name == "shampoo":
+            if not ASDL_AVAILABLE:
+                raise RuntimeError(
+                    f"ASDL package is required for {opt_name} optimizer but not available. "
+                    "Please install it with: pip install asdl"
+                )
+            # For Shampoo, we use AdamW as the base optimizer
+            optimizer = torch.optim.AdamW(
+                parameters, lr=args.lr, weight_decay=args.weight_decay
+            )
         else:
             raise RuntimeError(
-                f"Invalid optimizer {args.opt}. Only SGD, RMSprop and AdamW are supported."
+                f"Invalid optimizer {args.opt}. Only SGD, RMSprop, AdamW, AdaFisher, AdaFisherW, Adafactor, AdaHessian, and Shampoo are supported."
             )
 
         args.lr_scheduler = args.lr_scheduler.lower()
@@ -347,6 +377,32 @@ class Trainer:
             lr_scheduler = main_lr_scheduler
 
         return optimizer, lr_scheduler
+
+    def init_gradient_maker(self, args):
+        """Initialize Shampoo gradient maker"""
+        if not ASDL_AVAILABLE:
+            raise RuntimeError("ASDL package is required for Shampoo but not available")
+        
+        # Set default values for Shampoo parameters if not provided
+        damping = getattr(args, 'shampoo_damping', getattr(args, 'damping', 1e-3))
+        preconditioner_upd_interval = getattr(args, 'shampoo_preconditioner_upd_interval', 
+                                            getattr(args, 'preconditioner_upd_interval', 10))
+        curvature_update_interval = getattr(args, 'shampoo_curvature_update_interval',
+                                          getattr(args, 'curvature_update_interval', 10))
+        ema_decay = getattr(args, 'shampoo_ema_decay', getattr(args, 'ema_decay', -1))
+        
+        config = PreconditioningConfig(
+            data_size=args.batch_size,
+            damping=damping,
+            preconditioner_upd_interval=preconditioner_upd_interval,
+            curvature_upd_interval=curvature_update_interval,
+            ema_decay=ema_decay,
+            ignore_modules=[nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.LayerNorm]
+        )
+        
+        gradient_maker = ShampooGradientMaker(self.model_without_ddp, config)
+            
+        return gradient_maker
 
     def init_preconditioner(self, args):
         if args.preconditioner == "kfac":
@@ -798,6 +854,84 @@ class Trainer:
             )
 
         return metric_logger 
+    
+    def train_one_epoch_shampoo(self, epoch):
+        """Training function for Shampoo optimizer using GradientMaker"""
+        args = self.args
+        model = self.model
+        criterion = self.criterion
+        optimizer = self.optimizer
+        data_loader = self.data_manager.train_loader
+        device = self.device
+        model_ema = self.model_ema
+        gradient_maker = self.gradient_maker
+
+        model.train()
+        metric_logger = utils.MetricLogger(delimiter="  ", rank=self.rank)
+        metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
+        metric_logger.add_meter(
+            "img/s", utils.SmoothedValue(window_size=10, fmt="{value}")
+        )
+
+        # Additional monitoring meters
+        metric_logger.add_meter(
+            "grad_norm", utils.SmoothedValue(window_size=1, fmt="{value}")
+        )
+
+        header = f"Epoch: [{epoch}]"
+        for i, (image, target) in enumerate(
+            metric_logger.log_every(data_loader, args.print_freq, header)
+        ):
+            start_time = time.time()
+            image, target = image.to(device), target.to(device)
+            
+            # Use GradientMaker for Shampoo
+            optimizer.zero_grad()
+            
+            # Setup model call and loss call through gradient maker
+            output = gradient_maker.setup_model_call(model, image)
+            loss = gradient_maker.setup_loss_call(criterion, output, target)
+            
+            # Forward and backward pass through gradient maker
+            final_output, final_loss = gradient_maker.forward_and_backward()
+            
+            # Apply gradient clipping if specified
+            if args.clip_grad_norm is not None:
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+
+            # Compute grad norm (L2) safely
+            with torch.no_grad():
+                sq_sum = 0.0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        sq_sum += float(p.grad.detach().data.norm(2).item() ** 2)
+                grad_norm_val = math.sqrt(sq_sum) if sq_sum > 0.0 else 0.0
+
+            optimizer.step()
+
+            if model_ema and i % args.model_ema_steps == 0:
+                model_ema.update_parameters(model)
+                if epoch < args.lr_warmup_epochs:
+                    # Reset ema buffer to keep copying weights during warmup period
+                    model_ema.n_averaged.fill_(0)
+
+            if self.args.lr_scheduler == "onecycle":
+                self.lr_scheduler.step()
+
+            # Use final_output for accuracy calculation
+            acc1 = utils.accuracy(final_output, target, topk=(1,))
+            batch_size = image.shape[0]
+            metric_logger.update(
+                loss=final_loss.item(),
+                lr=optimizer.param_groups[0]["lr"],
+            )
+            metric_logger.meters["acc1"].update(acc1[0].item(), n=batch_size)
+            metric_logger.meters["grad_norm"].update(grad_norm_val)
+            metric_logger.meters["img/s"].update(
+                batch_size / (time.time() - start_time)
+            )
+
+        return metric_logger
     
 
     def write_training_summary(self, epoch, metric_logger):

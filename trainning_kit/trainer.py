@@ -5,11 +5,13 @@ import time
 from typing import Callable
 import warnings
 
+
 from costom_modules.image_classification import (
     get_network as create_image_classification_model,
 )
 import kfac
 from optimizers.AdaFisher import AdaFisher, AdaFisherW
+from optimizers.AdaHessian import Adahessian
 from trainning_kit import presets
 import torch
 from trainning_kit import utils
@@ -24,6 +26,7 @@ from torch.utils.tensorboard import SummaryWriter
 from .common import WORKSPACE_ROOT
 from kfac.dia_kfac.preconditioner import DiagKFACPreconditioner
 import logging
+from torch.optim import Adafactor
 
 
 class Trainer:
@@ -77,6 +80,13 @@ class Trainer:
         self.scaler = torch.amp.GradScaler("cuda") if args.amp else None
 
         self.optimizer, self.lr_scheduler = self.init_optimizer(args)
+        
+        # 检查AdaHessian与AMP的兼容性
+        if isinstance(getattr(self, 'optimizer', None), Adahessian) and args.amp:
+            print("Warning: AdaHessian with AMP may cause issues. Consider disabling AMP for better stability.")
+            args.amp = False
+            self.scaler = None
+
         if args.preconditioner in ["kfac", "diag_kfac"]:
             self.preconditioner, self.preconditioner_scheduler = (
                 self.init_preconditioner(args)
@@ -121,7 +131,12 @@ class Trainer:
         else:
             self.summary_writer = None
 
-        self.train_function = self.train_one_epoch
+        # 根据优化器类型选择训练函数
+        if isinstance(self.optimizer, Adahessian):
+            self.train_function = self.train_one_epoch_adahessian
+            print("Using specialized training function for AdaHessian optimizer")
+        else:
+            self.train_function = self.train_one_epoch
         self.train_total_time = 0
 
     def init_logger(self, args):
@@ -259,6 +274,18 @@ class Trainer:
                 Lambda=args.lamb,
                 dist=args.distributed,
             )
+        elif opt_name == "adafactor":
+            optimizer = Adafactor(
+                parameters,
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
+        elif opt_name == "adahessian":
+            optimizer = Adahessian(
+                parameters,
+                lr=args.lr,
+                weight_decay=args.weight_decay,
+            )
         else:
             raise RuntimeError(
                 f"Invalid optimizer {args.opt}. Only SGD, RMSprop and AdamW are supported."
@@ -285,7 +312,7 @@ class Trainer:
                 max_lr=args.lr,
                 total_steps=args.epochs * len(self.data_manager.train_loader),
                 pct_start=args.pct_start,
-                cycle_momentum=False if opt_name.startswith("adafisher") else True,
+                cycle_momentum=False if opt_name in ["adafisher", "adafisherw", "adafactor"] else True,
             )
             args.lr_warmup_epochs = 0
         else:
@@ -667,6 +694,111 @@ class Trainer:
             )
 
         return metric_logger
+
+    def train_one_epoch_adahessian(self, epoch):
+        args = self.args
+        model = self.model
+        criterion = self.criterion
+        optimizer = self.optimizer
+        data_loader = self.data_manager.train_loader
+        device = self.device
+        model_ema = self.model_ema
+        scaler = self.scaler
+
+        model.train()
+        metric_logger = utils.MetricLogger(delimiter="  ", rank=self.rank)
+        metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
+        metric_logger.add_meter(
+            "img/s", utils.SmoothedValue(window_size=10, fmt="{value}")
+        )
+
+        # Additional monitoring meters
+        if self.scaler is not None:
+            metric_logger.add_meter(
+                "loss_scale", utils.SmoothedValue(window_size=1, fmt="{value}")
+            )
+        metric_logger.add_meter(
+            "grad_norm", utils.SmoothedValue(window_size=1, fmt="{value}")
+        )
+
+        # Track AMP overflow events by observing loss_scale decreases
+        self._amp_overflow_count = 0
+        _prev_loss_scale = (
+            float(self.scaler.get_scale()) if self.scaler is not None else None
+        )
+
+        header = f"Epoch: [{epoch}]"
+        for i, (image, target) in enumerate(
+            metric_logger.log_every(data_loader, args.print_freq, header)
+        ):
+            start_time = time.time()
+            image, target = image.to(device), target.to(device)
+            with torch.amp.autocast("cuda"):
+                output = model(image)
+                loss = criterion(output, target)
+
+            optimizer.zero_grad()
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                # Unscale before any grad norm computation / clipping
+                scaler.unscale_(optimizer)
+                if args.clip_grad_norm is not None:
+                    nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+
+                # Compute grad norm (L2) safely
+                with torch.no_grad():
+                    sq_sum = 0.0
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            sq_sum += float(p.grad.detach().data.norm(2).item() ** 2)
+                    grad_norm_val = math.sqrt(sq_sum) if sq_sum > 0.0 else 0.0
+
+                scaler.step(optimizer)
+                scaler.update()
+
+                # Log current loss scale and detect overflow via scale drop
+                current_scale = float(self.scaler.get_scale())
+                metric_logger.update(loss_scale=current_scale)
+                if _prev_loss_scale is not None and current_scale < _prev_loss_scale:
+                    self._amp_overflow_count += 1
+                _prev_loss_scale = current_scale
+            else:
+                # AdaHessian需要create_graph=True来计算二阶导数
+                loss.backward(create_graph=True)
+                
+                # AdaHessian不应该使用梯度裁剪，因为会破坏计算图
+                # if args.clip_grad_norm is not None:
+                #     nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+
+                # 简化梯度范数计算，避免干扰AdaHessian
+                grad_norm_val = 0.0
+
+                # AdaHessian必须立即执行step，避免计算图被破坏
+                optimizer.step()
+
+            if model_ema and i % args.model_ema_steps == 0:
+                model_ema.update_parameters(model)
+                if epoch < args.lr_warmup_epochs:
+                    # Reset ema buffer to keep copying weights during warmup period
+                    model_ema.n_averaged.fill_(0)
+
+            if self.args.lr_scheduler == "onecycle":
+                self.lr_scheduler.step()
+
+            acc1 = utils.accuracy(output, target, topk=(1,))
+            batch_size = image.shape[0]
+            metric_logger.update(
+                loss=loss.item(),
+                lr=optimizer.param_groups[0]["lr"],
+            )
+            metric_logger.meters["acc1"].update(acc1[0].item(), n=batch_size)
+            metric_logger.meters["grad_norm"].update(grad_norm_val)
+            metric_logger.meters["img/s"].update(
+                batch_size / (time.time() - start_time)
+            )
+
+        return metric_logger 
+    
 
     def write_training_summary(self, epoch, metric_logger):
         if self.summary_writer is not None:

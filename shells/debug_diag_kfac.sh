@@ -5,11 +5,11 @@ python \
  main_local.py \
  --timestamp="$current_time" \
  --experiment-name="kfac" \
- --model='densenet121Cifar' \
- --dataset='cifar100' \
+ --model='resnet18Cifar' \
+ --dataset='cifar10' \
  --epochs 60 \
  --batch-size 256 \
- --opt adamw \
+ --opt adahessian \
  --lr 0.001 \
  --weight-decay 0.001  \
  --norm-weight-decay 0.0 \
@@ -31,7 +31,7 @@ python \
  --kfac-inv-update-steps 100 \
  --kfac-damping 0.003 \
  --kfac-kl-clip 0.0015 \
- --amp
+ #--amp
  #--model-ema \
  #--ra-sampler \
  #--ra-reps 4 \

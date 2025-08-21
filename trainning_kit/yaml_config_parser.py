@@ -118,9 +118,21 @@ class DefaultConfig:
     kfac_strategy: str = "comm-opt"
     kfac_grad_worker_fraction: float = 0.25
     
-    # AdaFisher parameters
-    gamma: float = 0.8
-    lamb: float = 1e-3
+    # 统一的优化器参数 (不同优化器会使用不同的默认值)
+    beta: float = 0.9          # 用于 AdaFisher, AdaFisherW
+    beta1: float = 0.9         # 用于 AdamW, AdaHessian
+    beta2: float = 0.999       # 用于 AdamW, AdaHessian
+    beta2_decay: float = -0.8  # 用于 Adafactor
+    eps: float = 1e-8          # 用于 AdamW, AdaHessian
+    eps1: Optional[float] = None  # 用于 Adafactor
+    eps2: float = 0.001        # 用于 Adafactor
+    lamb: float = 0.001        # 用于 AdaFisher, AdaFisherW (避免使用关键字lambda)
+    gamma: float = 0.8         # 用于 AdaFisher, AdaFisherW
+    tcov: int = 100            # 用于 AdaFisher, AdaFisherW
+    d: float = 1.0             # 用于 Adafactor
+    hessian_power: int = 1     # 用于 AdaHessian
+    single_gpu: bool = True    # 用于 AdaHessian
+    amsgrad: bool = False      # 用于 AdamW
     
     # Shampoo parameters
     shampoo_damping: float = 1e-3

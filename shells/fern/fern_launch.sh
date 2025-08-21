@@ -8,6 +8,6 @@ mpirun --host fern02,fern01 \
  -np 2 -map-by ppr:1:node \
  -x MASTER_ADDR -x MASTER_PORT \
  /home/yu/miniconda3/envs/py313/bin/python \
- main.py \
- --config configs/swin_b_cifar100.yaml \
- --experiment-name "swin_b_adamw_diag_kfac_113"
+ main_mpi.py \
+ --config configs/resnet18_cifar10_single_node.yaml \
+ --experiment-name "resnet18_adamw_test"

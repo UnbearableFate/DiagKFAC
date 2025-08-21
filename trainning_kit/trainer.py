@@ -273,39 +273,64 @@ class Trainer:
                 eps=0.0316,
                 alpha=0.9,
             )
+        elif opt_name == "adam":
+            optimizer = torch.optim.Adam(
+                parameters, 
+                lr=args.lr, 
+                betas=(args.beta1, args.beta2),
+                eps=args.eps,
+                weight_decay=args.weight_decay,
+                amsgrad=args.amsgrad
+            ) 
         elif opt_name == "adamw":
             optimizer = torch.optim.AdamW(
-                parameters, lr=args.lr, weight_decay=args.weight_decay
+                parameters, 
+                lr=args.lr, 
+                betas=(args.beta1, args.beta2),
+                eps=args.eps,
+                weight_decay=args.weight_decay,
+                amsgrad=args.amsgrad
             )
         elif opt_name == "adafisher":
             optimizer = AdaFisher(
                 self.model,
                 lr=args.lr,
-                weight_decay=args.weight_decay,
-                gamma=args.gamma,
+                beta=args.beta,
                 Lambda=args.lamb,
+                gamma=args.gamma,
+                TCov=args.tcov,
+                weight_decay=args.weight_decay,
                 dist=args.distributed,
             )
         elif opt_name == "adafisherw":
             optimizer = AdaFisherW(
                 self.model,
                 lr=args.lr,
-                weight_decay=args.weight_decay,
-                gamma=args.gamma,
+                beta=args.beta,
                 Lambda=args.lamb,
+                gamma=args.gamma,
+                TCov=args.tcov,
+                weight_decay=args.weight_decay,
                 dist=args.distributed,
             )
         elif opt_name == "adafactor":
             optimizer = Adafactor(
                 parameters,
                 lr=args.lr,
+                beta2_decay=args.beta2_decay,
+                eps=(args.eps1, args.eps2),
+                d=args.d,
                 weight_decay=args.weight_decay,
             )
         elif opt_name == "adahessian":
             optimizer = Adahessian(
                 parameters,
                 lr=args.lr,
+                betas=(args.beta1, args.beta2),
+                eps=args.eps,
                 weight_decay=args.weight_decay,
+                hessian_power=args.hessian_power,
+                single_gpu= True,
             )
         elif opt_name == "shampoo":
             if not ASDL_AVAILABLE:
@@ -315,7 +340,12 @@ class Trainer:
                 )
             # For Shampoo, we use AdamW as the base optimizer
             optimizer = torch.optim.AdamW(
-                parameters, lr=args.lr, weight_decay=args.weight_decay
+                parameters, 
+                lr=args.lr, 
+                betas=(args.beta1, args.beta2),
+                eps=args.eps,
+                weight_decay=args.weight_decay,
+                amsgrad=args.amsgrad
             )
         else:
             raise RuntimeError(

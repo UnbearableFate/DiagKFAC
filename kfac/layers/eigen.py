@@ -347,9 +347,25 @@ class KFACEigenLayer(KFACBaseLayer):
             )
 
         if self.symmetric_factors:
-            self.dg, self.qg = torch.linalg.eigh(
-                self.g_factor.to(torch.float32),
-            )
+            try:
+                self.dg, self.qg = torch.linalg.eigh(
+                    self.g_factor.to(torch.float32),
+                )
+            except Exception as e:
+                print(f"eigen a symmetric decomposition error: {e} at {self.name}, a shape{self.g_factor.shape} at rank {get_rank()}")
+                if torch.isnan(self.g_factor).any() or torch.isinf(self.g_factor).any():
+                    print(f"nan or inf in g_factor at {self.name} try to fix")
+                    self.g_factor.nan_to_num_()
+                try :
+                    print(f"gpu memory usage at {self.name} before fix: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
+                    print(f"try to fix g_factor at {self.name}")
+                    epsilon = 0.007
+                    matrix = self.g_factor + epsilon * torch.eye(self.g_factor.size(0), dtype=torch.float32, device=self.g_factor.device)
+                    self.dg, self.qg = torch.linalg.eigh(
+                        (matrix).to(torch.float32),
+                    )
+                except Exception as e:
+                    print(f"eigen a decomposition error again: {e} at {self.name} ,pass")
         else:
             dg, qg = torch.linalg.eig(
                 self.g_factor.to(torch.float32),

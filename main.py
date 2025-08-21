@@ -6,7 +6,6 @@ from trainning_kit.yaml_config_parser import merged_args_parser
 from trainning_kit.trainer import Trainer
 
 args = merged_args_parser()
-print(f"Parsed arguments: {args}")
 timeout = datetime.timedelta(seconds=30)
 dist.init_process_group(backend='nccl', timeout=timeout)
 print("Distributed process group initialized.")

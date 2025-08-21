@@ -1,25 +1,25 @@
+# === Paper-aligned HPs (AdaFisher, ICLR 2025) ===
+# CIFAR-10: batch_size=256, weight_decay=5e-4, cosine LR; AdaFisher defaults α=0.001, λ=1e-3, γ=0.8, β=0.9
+# Epoch counts (WCT-matched): AdaFisher=200, adamw/adamw=210, K-FAC=107, Shampoo=36, AdaHessian=89
+
 # ResNet18 CIFAR-10 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet18'
+  model: 'resnet18Cifar'
   dataset: 'cifar10'
   
   # 训练参数
-  batch_size: 128
-  lr: 0.1
-  weight_decay: 1e-4
+  batch_size: 256
+  lr: 0.001
+  weight_decay: 5e-4
   clip_grad_norm: 5.0
-  workers: 8
+  workers: 16
   
   # 技术设置
   amp: true
   device: 'cuda'
-  
-  # 调度器配置
-  lr_scheduler: 'cosineannealinglr'
-  lr_min: 1e-6
   
   # 日志和输出
   print_freq: 100
@@ -29,15 +29,43 @@ base_config: &base_config
 optimizers:
   adamw: &adamw_config
     opt: 'adamw'
+    # adamw 特有参数
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-8
+    amsgrad: false
     
   adafisherw: &adafisherw_config
     opt: 'adafisherw'
-    gamma: 0.8
+    # AdaFisherW 特有参数
+    beta: 0.9
     lamb: 3e-3
-    weight_decay: 0.01
+    gamma: 0.8
+    tcov: 100
+    
+  adafisher: &adafisher_config
+    opt: 'adafisher'
+    # AdaFisher 特有参数
+    beta: 0.9
+    lamb: 1e-3
+    gamma: 0.8
+    tcov: 100
+    
+  adafactor: &adafactor_config
+    opt: 'adafactor'
+    # Adafactor 特有参数
+    beta2_decay: -0.8
+    eps1: null
+    eps2: 1e-3
+    d: 1.0
     
   adahessian: &adahessian_config
     opt: 'adahessian'
+    # AdaHessian 特有参数
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-4
+    hessian_power: 1
     # AdaHessian 不兼容 AMP，需要禁用
     amp: false
     
@@ -46,7 +74,7 @@ optimizers:
     # Shampoo 特有参数
     shampoo_damping: 1e-3
     shampoo_preconditioner_upd_interval: 10
-    shampoo_curvature_update_interval: 10
+    shampoo_curvature_update_interval: 100
     shampoo_ema_decay: -1
 
 # 预条件器配置
@@ -58,7 +86,7 @@ preconditioners:
     preconditioner: 'kfac'
     kfac_factor_update_steps: 10
     kfac_inv_update_steps: 100
-    kfac_damping: 1e-3
+    kfac_damping: 1e-3  # per paper search space; default ~1e-3
     kfac_kl_clip: 1e-3
     kfac_factor_decay: 0.95
     
@@ -66,28 +94,36 @@ preconditioners:
     preconditioner: 'diag_kfac'
     kfac_factor_update_steps: 10
     kfac_inv_update_steps: 100
-    kfac_damping: 1e-3
-    kfac_kl_clip: 1e-3
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
 
 # 实验定义
 experiments:
   # 短期测试实验 (快速验证)
   - name: "resnet18_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 5
+    epochs: 2
+
+  - name: "resnet18_adafisherw_test"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 2
+
+  - name: "resnet18_adafactor_test"
+    <<: [*base_config, *adafactor_config, *none_precond]
+    epochs: 2
 
   - name: "resnet18_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 5
+    epochs: 2
 
   - name: "resnet18_shampoo_test"
     <<: [*base_config, *shampoo_config, *none_precond]
-    epochs: 5
+    epochs: 2
 
   - name: "resnet18_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 5
+    epochs: 2
     
   - name: "resnet18_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 5
+    epochs: 2

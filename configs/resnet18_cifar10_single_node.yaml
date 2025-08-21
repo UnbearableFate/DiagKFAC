@@ -72,7 +72,7 @@ optimizers:
   shampoo: &shampoo_config
     opt: 'shampoo'
     # Shampoo 特有参数
-    shampoo_damping: 1e-3
+    shampoo_damping: 1e-5
     shampoo_preconditioner_upd_interval: 10
     shampoo_curvature_update_interval: 100
     shampoo_ema_decay: -1
@@ -84,46 +84,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 10
-    kfac_inv_update_steps: 100
-    kfac_damping: 1e-3  # per paper search space; default ~1e-3
-    kfac_kl_clip: 1e-3
-    kfac_factor_decay: 0.95
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 10
-    kfac_inv_update_steps: 100
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
     kfac_damping: 2.8e-3
     kfac_kl_clip: 1.8e-3
 
 # 实验定义
 experiments:
-  # 短期测试实验 (快速验证)
+  # 实验 
   - name: "resnet18_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 2
+    epochs: 200
 
   - name: "resnet18_adafisherw_test"
     <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 2
+    epochs: 120
 
   - name: "resnet18_adafactor_test"
     <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 2
+    epochs: 105
 
   - name: "resnet18_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 2
+    epochs: 67
 
   - name: "resnet18_shampoo_test"
     <<: [*base_config, *shampoo_config, *none_precond]
-    epochs: 2
+    epochs: 71
 
   - name: "resnet18_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 2
+    epochs: 80
     
   - name: "resnet18_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 2
+    epochs: 90

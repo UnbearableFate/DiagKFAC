@@ -5,7 +5,6 @@ import time
 from typing import Callable
 import warnings
 
-
 from costom_modules.image_classification import (
     get_network as create_image_classification_model,
 )

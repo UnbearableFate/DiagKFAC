@@ -1,0 +1,93 @@
+# ResNet18 CIFAR-10 单节点训练实验配置
+
+# 基础配置模板
+base_config: &base_config
+  # 模型和数据集
+  model: 'resnet18'
+  dataset: 'cifar10'
+  
+  # 训练参数
+  batch_size: 128
+  lr: 0.1
+  weight_decay: 1e-4
+  clip_grad_norm: 5.0
+  workers: 8
+  
+  # 技术设置
+  amp: true
+  device: 'cuda'
+  
+  # 调度器配置
+  lr_scheduler: 'cosineannealinglr'
+  lr_min: 1e-6
+  
+  # 日志和输出
+  print_freq: 100
+  unified_experiment_name: "resnet18_cifar10_experiments"
+
+# 优化器配置
+optimizers:
+  adamw: &adamw_config
+    opt: 'adamw'
+    
+  adafisherw: &adafisherw_config
+    opt: 'adafisherw'
+    gamma: 0.8
+    lamb: 3e-3
+    weight_decay: 0.01
+    
+  adahessian: &adahessian_config
+    opt: 'adahessian'
+    # AdaHessian 不兼容 AMP，需要禁用
+    amp: false
+    
+  shampoo: &shampoo_config
+    opt: 'shampoo'
+    # Shampoo 特有参数
+    shampoo_damping: 1e-3
+    shampoo_preconditioner_upd_interval: 10
+    shampoo_curvature_update_interval: 10
+    shampoo_ema_decay: -1
+
+# 预条件器配置
+preconditioners:
+  none: &none_precond
+    preconditioner: 'none'
+    
+  kfac: &kfac_precond
+    preconditioner: 'kfac'
+    kfac_factor_update_steps: 10
+    kfac_inv_update_steps: 100
+    kfac_damping: 1e-3
+    kfac_kl_clip: 1e-3
+    kfac_factor_decay: 0.95
+    
+  diag_kfac: &diag_kfac_precond
+    preconditioner: 'diag_kfac'
+    kfac_factor_update_steps: 10
+    kfac_inv_update_steps: 100
+    kfac_damping: 1e-3
+    kfac_kl_clip: 1e-3
+
+# 实验定义
+experiments:
+  # 短期测试实验 (快速验证)
+  - name: "resnet18_adamw_test"
+    <<: [*base_config, *adamw_config, *none_precond]
+    epochs: 5
+
+  - name: "resnet18_adahessian_test"
+    <<: [*base_config, *adahessian_config, *none_precond]
+    epochs: 5
+
+  - name: "resnet18_shampoo_test"
+    <<: [*base_config, *shampoo_config, *none_precond]
+    epochs: 5
+
+  - name: "resnet18_kfac_test"
+    <<: [*base_config, *adamw_config, *kfac_precond]
+    epochs: 5
+    
+  - name: "resnet18_diag_kfac_test"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    epochs: 5

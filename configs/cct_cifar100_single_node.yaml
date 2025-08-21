@@ -1,19 +1,19 @@
-# === Paper-aligned HPs (AdaFisher, ICLR 2025) ===
-# CIFAR-10: batch_size=256, weight_decay=5e-4, cosine LR; AdaFisher defaults α=0.001, λ=1e-3, γ=0.8, β=0.9
-# Epoch counts (WCT-matched): AdaFisher=200, adamw/adamw=210, K-FAC=107, Shampoo=36, AdaHessian=89
+# === CIFAR-100 CCT Configuration ===
+# CIFAR-100: batch_size=128, weight_decay=1e-4, AdamW optimizer
+# Compact Convolutional Transformer (CCT) configuration
 
-# ResNet18 CIFAR-10 单节点训练实验配置
+# CCT CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet18Cifar'
-  dataset: 'cifar10'
+  model: 'cct'
+  dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
-  lr: 0.001
-  weight_decay: 5e-4
+  lr: 1e-3
+  weight_decay: 1e-4
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "resnet18_cifar10_experiments"
+  unified_experiment_name: "cct_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -39,7 +39,7 @@ optimizers:
     opt: 'adafisherw'
     # AdaFisherW 特有参数
     beta: 0.9
-    lamb: 1e-3
+    lamb: 3e-3
     gamma: 0.8
     tcov: 100
     
@@ -70,6 +70,7 @@ optimizers:
     shampoo_preconditioner_upd_interval: 10
     shampoo_curvature_update_interval: 100
     shampoo_ema_decay: -1
+    amp: false
 
 # 预条件器配置
 preconditioners:
@@ -78,45 +79,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 15
+    kfac_inv_update_steps: 150
+    kfac_damping: 3e-3
+    kfac_kl_clip: 2e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 15
+    kfac_inv_update_steps: 150
+    kfac_damping: 3e-3
+    kfac_kl_clip: 2e-3
 
 # 实验定义
 experiments:
   # 实验 
-  - name: "resnet18_adamw_test"
-    <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 200
+  # - name: "cct_adamw_test"
+  #   <<: [*base_config, *adamw_config, *none_precond]
+  #   epochs: 200
 
-  - name: "resnet18_adafisherw_test"
-    <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 120
+  # - name: "cct_adafisherw_test"
+  #   <<: [*base_config, *adafisherw_config, *none_precond]
+  #   epochs: 140
 
-  - name: "resnet18_adafactor_test"
-    <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 105
+  # - name: "cct_adafactor_test"
+  #   <<: [*base_config, *adafactor_config, *none_precond]
+  #   epochs: 120
 
-  - name: "resnet18_adahessian_test"
-    <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 67
+  # - name: "cct_adahessian_test"
+  #   <<: [*base_config, *adahessian_config, *none_precond]
+  #   epochs: 80
 
-  - name: "resnet18_shampoo_test"
+  - name: "cct_shampoo_test"
     <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 71
+    epochs: 85
 
-  - name: "resnet18_kfac_test"
+  - name: "cct_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 80
+    epochs: 100
     
-  - name: "resnet18_diag_kfac_test"
+  - name: "cct_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 90
+    epochs: 110

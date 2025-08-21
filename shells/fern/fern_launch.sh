@@ -10,4 +10,4 @@ mpirun --host fern02,fern01 \
  /home/yu/miniconda3/envs/py313/bin/python \
  main_mpi.py \
  --config configs/resnet18_cifar10_single_node.yaml \
- --experiment-name "resnet18_adamw_test"
+ --experiment-name "cct_kfac_test"

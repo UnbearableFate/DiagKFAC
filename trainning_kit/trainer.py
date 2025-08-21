@@ -703,12 +703,11 @@ class Trainer:
         ):
             start_time = time.time()
             image, target = image.to(device), target.to(device)
-            with torch.amp.autocast("cuda"):
-                output = model(image)
-                loss = criterion(output, target)
-
             optimizer.zero_grad()
             if scaler is not None:
+                with torch.amp.autocast("cuda"):
+                    output = model(image)
+                    loss = criterion(output, target)
                 scaler.scale(loss).backward()
                 if self.preconditioner is not None:
                     if args.preconditioner == "diag_kfac":
@@ -740,6 +739,8 @@ class Trainer:
                     self._amp_overflow_count += 1
                 _prev_loss_scale = current_scale
             else:
+                output = model(image)
+                loss = criterion(output, target)
                 loss.backward()
                 if self.preconditioner is not None:
                     if args.preconditioner == "diag_kfac":
@@ -791,7 +792,6 @@ class Trainer:
         data_loader = self.data_manager.train_loader
         device = self.device
         model_ema = self.model_ema
-        scaler = self.scaler
 
         model.train()
         metric_logger = utils.MetricLogger(delimiter="  ", rank=self.rank)
@@ -800,69 +800,26 @@ class Trainer:
             "img/s", utils.SmoothedValue(window_size=10, fmt="{value}")
         )
 
-        # Additional monitoring meters
-        if self.scaler is not None:
-            metric_logger.add_meter(
-                "loss_scale", utils.SmoothedValue(window_size=1, fmt="{value}")
-            )
+        # Additional monitoring meters (AdaHessian doesn't support AMP)
         metric_logger.add_meter(
             "grad_norm", utils.SmoothedValue(window_size=1, fmt="{value}")
         )
 
-        # Track AMP overflow events by observing loss_scale decreases
-        self._amp_overflow_count = 0
-        _prev_loss_scale = (
-            float(self.scaler.get_scale()) if self.scaler is not None else None
-        )
-
-        header = f"Epoch: [{epoch}]"
+        header = f"Epoch: [{epoch}] (AdaHessian - No AMP)"
         for i, (image, target) in enumerate(
             metric_logger.log_every(data_loader, args.print_freq, header)
         ):
             start_time = time.time()
             image, target = image.to(device), target.to(device)
-            with torch.amp.autocast("cuda"):
-                output = model(image)
-                loss = criterion(output, target)
-
             optimizer.zero_grad()
-            if scaler is not None:
-                scaler.scale(loss).backward()
-                # Unscale before any grad norm computation / clipping
-                scaler.unscale_(optimizer)
-                if args.clip_grad_norm is not None:
-                    nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
 
-                # Compute grad norm (L2) safely
-                with torch.no_grad():
-                    sq_sum = 0.0
-                    for p in model.parameters():
-                        if p.grad is not None:
-                            sq_sum += float(p.grad.detach().data.norm(2).item() ** 2)
-                    grad_norm_val = math.sqrt(sq_sum) if sq_sum > 0.0 else 0.0
-
-                scaler.step(optimizer)
-                scaler.update()
-
-                # Log current loss scale and detect overflow via scale drop
-                current_scale = float(self.scaler.get_scale())
-                metric_logger.update(loss_scale=current_scale)
-                if _prev_loss_scale is not None and current_scale < _prev_loss_scale:
-                    self._amp_overflow_count += 1
-                _prev_loss_scale = current_scale
-            else:
-                # AdaHessian需要create_graph=True来计算二阶导数
-                loss.backward(create_graph=True)
-                
-                # AdaHessian不应该使用梯度裁剪，因为会破坏计算图
-                # if args.clip_grad_norm is not None:
-                #     nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
-
-                # 简化梯度范数计算，避免干扰AdaHessian
-                grad_norm_val = 0.0
-
-                # AdaHessian必须立即执行step，避免计算图被破坏
-                optimizer.step()
+            output = model(image)
+            loss = criterion(output, target)
+            loss.backward(create_graph=True)
+            # 简化梯度范数计算，避免干扰AdaHessian
+            grad_norm_val = 0.0
+            # AdaHessian必须立即执行step，避免计算图被破坏
+            optimizer.step()
 
             if model_ema and i % args.model_ema_steps == 0:
                 model_ema.update_parameters(model)

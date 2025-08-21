@@ -12,7 +12,7 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 # --- Configuration ---
-CONFIG_FILE="${CONFIG_FILE:-configs/resnet18_cifar10_single_node.yaml}"
+CONFIG_FILE="${CONFIG_FILE:-configs/densenet161_cifar100_single_node.yaml}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-}"  # 如果为空，将运行所有实验
 RUN_MODE="${RUN_MODE:-single}"  # single 或 batch
 
@@ -53,6 +53,7 @@ run_experiment() {
       --config "${CONFIG_FILE}" \
       --experiment-name "${exp_name}" \
       --timestamp "${timestamp}" \
+      --epochs 1 \
       ; then
     
     echo "SUCCESS" > "${success_marker}"
@@ -105,7 +106,6 @@ if [[ "$RUN_MODE" == "batch" ]] || [[ -z "$EXPERIMENT_NAME" ]]; then
       failed_experiments+=("$exp_name")
       # 在单个实验失败时立即停止
       echo "[ERROR] Experiment '$exp_name' failed, stopping batch execution"
-      break
     fi
   done
   

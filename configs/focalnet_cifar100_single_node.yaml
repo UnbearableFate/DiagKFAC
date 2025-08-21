@@ -1,19 +1,19 @@
-# === Paper-aligned HPs (AdaFisher, ICLR 2025) ===
-# CIFAR-10: batch_size=256, weight_decay=5e-4, cosine LR; AdaFisher defaults α=0.001, λ=1e-3, γ=0.8, β=0.9
-# Epoch counts (WCT-matched): AdaFisher=200, adamw/adamw=210, K-FAC=107, Shampoo=36, AdaHessian=89
+# === CIFAR-100 FocalNet Configuration ===
+# CIFAR-100: batch_size=64, weight_decay=5e-2, AdamW optimizer
+# FocalNet with focal modulation for hierarchical vision processing
 
-# ResNet18 CIFAR-10 单节点训练实验配置
+# FocalNet CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet18Cifar'
-  dataset: 'cifar10'
+  model: 'focalnet'
+  dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
-  lr: 0.001
-  weight_decay: 5e-4
+  lr: 1e-3
+  weight_decay: 5e-2
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "resnet18_cifar10_experiments"
+  unified_experiment_name: "focalnet_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -78,45 +78,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 18
+    kfac_inv_update_steps: 180
+    kfac_damping: 4e-3
+    kfac_kl_clip: 2.5e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 18
+    kfac_inv_update_steps: 180
+    kfac_damping: 4e-3
+    kfac_kl_clip: 2.5e-3
 
 # 实验定义
 experiments:
   # 实验 
-  - name: "resnet18_adamw_test"
+  - name: "focalnet_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 200
+    epochs: 300
 
-  - name: "resnet18_adafisherw_test"
+  - name: "focalnet_adafisherw_test"
     <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 120
+    epochs: 180
 
-  - name: "resnet18_adafactor_test"
+  - name: "focalnet_adafactor_test"
     <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 105
+    epochs: 160
 
-  - name: "resnet18_adahessian_test"
+  - name: "focalnet_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 67
+    epochs: 100
 
-  - name: "resnet18_shampoo_test"
+  - name: "focalnet_shampoo_test"
     <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 71
+    epochs: 110
 
-  - name: "resnet18_kfac_test"
+  - name: "focalnet_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 80
+    epochs: 130
     
-  - name: "resnet18_diag_kfac_test"
+  - name: "focalnet_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 90
+    epochs: 140

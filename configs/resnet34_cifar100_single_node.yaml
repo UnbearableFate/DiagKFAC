@@ -1,18 +1,18 @@
-# === Paper-aligned HPs (AdaFisher, ICLR 2025) ===
-# CIFAR-10: batch_size=256, weight_decay=5e-4, cosine LR; AdaFisher defaults α=0.001, λ=1e-3, γ=0.8, β=0.9
-# Epoch counts (WCT-matched): AdaFisher=200, adamw/adamw=210, K-FAC=107, Shampoo=36, AdaHessian=89
+# === CIFAR-100 ResNet34 Configuration ===
+# CIFAR-100: batch_size=128, weight_decay=1e-4, cosine LR with warmup
+# ResNet34 typically needs more regularization for CIFAR-100 due to higher complexity
 
-# ResNet18 CIFAR-10 单节点训练实验配置
+# ResNet34 CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet18Cifar'
-  dataset: 'cifar10'
+  model: 'resnet34Cifar'
+  dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
-  lr: 0.001
+  lr: 0.001  # AdamW默认学习率
   weight_decay: 5e-4
   clip_grad_norm: 5.0
   workers: 16
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "resnet18_cifar10_experiments"
+  unified_experiment_name: "resnet34_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -58,7 +58,7 @@ optimizers:
     lr: 0.15
     beta1: 0.9
     beta2: 0.999
-    eps: 1e-4
+    eps: 5e-4
     hessian_power: 1
     # AdaHessian 不兼容 AMP，需要禁用
     amp: false
@@ -93,30 +93,30 @@ preconditioners:
 # 实验定义
 experiments:
   # 实验 
-  - name: "resnet18_adamw_test"
+  - name: "resnet34_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 200
+    epochs: 250
 
-  - name: "resnet18_adafisherw_test"
+  - name: "resnet34_adafisherw_test"
     <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 120
+    epochs: 150
 
-  - name: "resnet18_adafactor_test"
+  - name: "resnet34_adafactor_test"
     <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 105
+    epochs: 130
 
-  - name: "resnet18_adahessian_test"
+  - name: "resnet34_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 67
+    epochs: 85
 
-  - name: "resnet18_shampoo_test"
+  - name: "resnet34_shampoo_test"
     <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 71
-
-  - name: "resnet18_kfac_test"
-    <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 80
-    
-  - name: "resnet18_diag_kfac_test"
-    <<: [*base_config, *adamw_config, *diag_kfac_precond]
     epochs: 90
+
+  - name: "resnet34_kfac_test"
+    <<: [*base_config, *adamw_config, *kfac_precond]
+    epochs: 100
+    
+  - name: "resnet34_diag_kfac_test"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    epochs: 110

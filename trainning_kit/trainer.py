@@ -40,6 +40,8 @@ except ImportError:
 class Trainer:
     def __init__(self, args, model=None):
         self.init(args, model)
+        self.max_acc1 = 0
+        self.final_acc1 = 0
 
     def init(self, args, model):
         self.args = args
@@ -539,7 +541,9 @@ class Trainer:
             self.write_training_summary(epoch, metric_logger)
             if args.lr_scheduler != "onecycle":
                 self.lr_scheduler.step()
-            self.evaluate(epoch=epoch)
+            self.final_acc1 = self.evaluate(epoch=epoch)
+            if self.final_acc1 > self.max_acc1:
+                self.max_acc1 = self.final_acc1
             if model_ema:
                 self.evaluate(epoch=epoch, log_suffix="EMA")
             if args.output_dir:
@@ -1000,6 +1004,7 @@ class Trainer:
     def print_after_train(self):
         if hasattr(self, "config_path"):
             with open(self.config_path, "a") as f:
+                f.write("\n")
                 f.write(f"Training completed at {datetime.datetime.now()}\n")
                 f.write(f"training_time: {self.train_total_time} \n")
                 f.write(
@@ -1008,6 +1013,8 @@ class Trainer:
                 f.write(
                     f"max cuda memory: {torch.cuda.max_memory_allocated() / (1024 ** 3)} GB\n"
                 )
+                f.write(f"final accuracy: {self.final_acc1}\n")
+                f.write(f"max accuracy: {self.max_acc1}\n")
         if (
             getattr(self, "log_dir", None) is not None
             and getattr(self.args, "config", None) is not None

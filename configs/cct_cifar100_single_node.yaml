@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "cct_cifar100_experiments"
+  unified_experiment_name: "single_node_cct_cifar100_experiments"
 
 # 优化器配置
 optimizers:

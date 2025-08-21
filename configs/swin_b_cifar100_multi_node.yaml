@@ -4,8 +4,8 @@
 base_config: &base_config
   # 模型和数据集
   model: 'swin_t'
-  dataset: 'cifar10'
-  
+  dataset: 'cifar100'
+
   # 训练参数
   batch_size: 256
   lr: 0.001
@@ -19,7 +19,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "swin_b_cifar10_single_node_test"
+  unified_experiment_name: "multi_node_swin_b_cifar100_experiments"
 
 # 优化器配置
 optimizers:

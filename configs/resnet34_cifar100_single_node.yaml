@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "resnet34_cifar100_experiments"
+  unified_experiment_name: "single_node_resnet34_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -70,6 +70,7 @@ optimizers:
     shampoo_preconditioner_upd_interval: 10
     shampoo_curvature_update_interval: 100
     shampoo_ema_decay: -1
+    amp: false
 
 # 预条件器配置
 preconditioners:

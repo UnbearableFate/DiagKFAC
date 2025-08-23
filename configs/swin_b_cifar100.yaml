@@ -1,19 +1,19 @@
-# === Paper-aligned HPs (AdaFisher, ICLR 2025) ===
-# CIFAR-10: batch_size=256, weight_decay=5e-4, cosine LR; AdaFisher defaults α=0.001, λ=1e-3, γ=0.8, β=0.9
-# Epoch counts (WCT-matched): AdaFisher=200, adamw/adamw=210, K-FAC=107, Shampoo=36, AdaHessian=89
+# === CIFAR-100 Swin-B Configuration ===
+# CIFAR-100: batch_size=64, weight_decay=5e-2, AdamW with warmup
+# Vision Transformer needs careful learning rate scheduling and regularization
 
-# ResNet18 CIFAR-10 单节点训练实验配置
+# Swin-B CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet18Cifar'
-  dataset: 'cifar10'
+  model: 'swin_b'
+  dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
   lr: 0.001
-  weight_decay: 5e-4
+  weight_decay: 0.001
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "single_node_resnet18_cifar10_experiments"
+  unified_experiment_name: "swin_s_cifar100"
 
 # 优化器配置
 optimizers:
@@ -39,14 +39,14 @@ optimizers:
     opt: 'adafisherw'
     # AdaFisherW 特有参数
     beta: 0.9
-    lamb: 1e-3
+    lamb: 3e-3
     gamma: 0.8
     tcov: 100
     
   adafactor: &adafactor_config
     opt: 'adafactor'
     # Adafactor 特有参数和学习率
-    lr: 0.01
+    lr: 0.003
     beta2_decay: -0.8
     eps1: null
     eps2: 1e-3
@@ -55,11 +55,11 @@ optimizers:
   adahessian: &adahessian_config
     opt: 'adahessian'
     # AdaHessian 特有参数和学习率
-    lr: 0.15
+    lr: 0.02
     beta1: 0.9
     beta2: 0.999
-    eps: 1e-4
-    hessian_power: 1
+    eps: 5e-4
+    hessian_power: 0.5
     # AdaHessian 不兼容 AMP，需要禁用
     amp: false
     
@@ -94,30 +94,30 @@ preconditioners:
 # 实验定义
 experiments:
   # 实验 
-  - name: "resnet18_adamw_test"
+  - name: "adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
     epochs: 200
-
-  - name: "resnet18_adafisherw_test"
-    <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 120
-
-  - name: "resnet18_adafactor_test"
-    <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 105
-
-  - name: "resnet18_adahessian_test"
-    <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 67
-
-  - name: "resnet18_shampoo_test"
-    <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 71
-
-  - name: "resnet18_kfac_test"
+  
+  - name: "kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 80
+    epochs: 71
     
-  - name: "resnet18_diag_kfac_test"
+  - name: "diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 90
+    epochs: 83
+
+  - name: "adafisherw_test"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 117
+
+  - name: "adafactor_test"
+    <<: [*base_config, *adafactor_config, *none_precond]
+    epochs: 97
+
+  - name: "shampoo_test"
+    <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
+    epochs: 79
+  
+  - name: "adahessian_test"
+    <<: [*base_config, *adahessian_config, *none_precond]
+    epochs: 50

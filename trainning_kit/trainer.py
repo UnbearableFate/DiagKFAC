@@ -160,11 +160,7 @@ class Trainer:
         print(f"init ok in {self.rank}")
 
     def init_logger(self, args):
-        model_name = (
-            type(self.model).__name__
-            if not self.args.distributed
-            else self.model_without_ddp.__class__.__name__
-        )
+        model_name = args.model 
         log_dir = os.path.join(
             args.workspace_path,
             "logs",
@@ -474,7 +470,7 @@ class Trainer:
                 grad_scaler=self.scaler.get_scale if self.scaler else None,
                 skip_layers=args.kfac_skip_layers,
                 compute_eigenvalue_outer_product=False,
-                split_num=4,
+                split_num=self.args.split_num,  # Use split_num from args
                 epochs=args.epochs,  # Pass epochs to preconditioner
                 loglevel=logging.INFO if self.rank == 0 else logging.DEBUG,
             )
@@ -538,7 +534,12 @@ class Trainer:
                 dist.all_reduce(t, op=dist.ReduceOp.SUM)
                 self.train_total_time = t.item() / self.world_size
             
-            self.write_training_summary(epoch, metric_logger)
+            if self.summary_writer is not None and self.rank == 0:
+                try:
+                    self.write_training_summary(epoch, metric_logger)
+                except Exception as e:
+                    print(f"Error writing training summary: {e}")
+
             if args.lr_scheduler != "onecycle":
                 self.lr_scheduler.step()
             self.final_acc1 = self.evaluate(epoch=epoch)
@@ -566,12 +567,14 @@ class Trainer:
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()
                 # utils.save_on_master(checkpoint, os.path.join(args.output_dir, f"model_{epoch}.pth"))
+                """
                 utils.save_on_master(
                     checkpoint,
                     os.path.join(
                         args.output_dir, f"checkpoint_{self.args.timestamp}.pth"
                     ),
                 )
+                """
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -644,30 +647,34 @@ class Trainer:
                 "Setting the world size to 1 is always a safe bet."
             )
 
-        metric_logger.synchronize_between_processes()
-        
-        if self.summary_writer is not None:
-            self.summary_writer.add_scalar(
-                f"Test/acc1{log_suffix}_vs_epoch", metric_logger.acc1.global_avg, epoch
-            )
-            self.summary_writer.add_scalar(
-                f"Test/acc5{log_suffix}_vs_epoch", metric_logger.acc5.global_avg, epoch
-            )
-            self.summary_writer.add_scalar(
-                f"Test/acc1{log_suffix}_vs_time",
-                metric_logger.acc1.global_avg,
-                self.train_total_time * 1000,
-            )
-            self.summary_writer.add_scalar(
-                f"Test/acc5{log_suffix}_vs_time",
-                metric_logger.acc5.global_avg,
-                self.train_total_time * 1000,
-            )
-            print(
-                f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}"
-            )
+        if self.world_size > 1:
+            metric_logger.synchronize_between_processes()
+
+        if self.summary_writer is not None and self.rank == 0:
+            try:
+                self.write_evaluation_summary(log_suffix, metric_logger, epoch)
+            except Exception as e:
+                print(f"Error writing evaluation summary: {e}")
 
         return metric_logger.acc1.global_avg
+
+    def write_evaluation_summary(self, log_suffix, metric_logger, epoch):
+        self.summary_writer.add_scalar(
+            f"Test/acc1{log_suffix}_vs_epoch", metric_logger.acc1.global_avg, epoch
+        )
+        self.summary_writer.add_scalar(
+            f"Test/acc5{log_suffix}_vs_epoch", metric_logger.acc5.global_avg, epoch
+        )
+        self.summary_writer.add_scalar(
+            f"Test/acc1{log_suffix}_vs_time",
+            metric_logger.acc1.global_avg,
+            self.train_total_time * 1000,
+        )
+        self.summary_writer.add_scalar(
+            f"Test/acc5{log_suffix}_vs_time",
+            metric_logger.acc5.global_avg,
+            self.train_total_time * 1000,
+        )
 
     def train_one_epoch(self, epoch):
         args = self.args
@@ -928,78 +935,77 @@ class Trainer:
     
 
     def write_training_summary(self, epoch, metric_logger):
-        if self.summary_writer is not None:
+        self.summary_writer.add_scalar(
+            f"Train/loss", metric_logger.loss.global_avg, epoch
+        )
+        self.summary_writer.add_scalar(
+            f"Train/lr", self.optimizer.param_groups[0]["lr"], epoch
+        )
+
+        # Training accuracy
+        if hasattr(metric_logger, "acc1"):
             self.summary_writer.add_scalar(
-                f"Train/loss", metric_logger.loss.global_avg, epoch
+                f"Train/acc1", metric_logger.acc1.global_avg, epoch
             )
+
+        # Grad norm (L2)
+        if "grad_norm" in metric_logger.meters:
             self.summary_writer.add_scalar(
-                f"Train/lr", self.optimizer.param_groups[0]["lr"], epoch
+                f"Train/grad_norm",
+                metric_logger.meters["grad_norm"].global_avg,
+                epoch,
             )
 
-            # Training accuracy
-            if hasattr(metric_logger, "acc1"):
-                self.summary_writer.add_scalar(
-                    f"Train/acc1", metric_logger.acc1.global_avg, epoch
-                )
-
-            # Grad norm (L2)
-            if "grad_norm" in metric_logger.meters:
-                self.summary_writer.add_scalar(
-                    f"Train/grad_norm",
-                    metric_logger.meters["grad_norm"].global_avg,
-                    epoch,
-                )
-
-            # Loss scale (AMP)
-            if self.scaler is not None and "loss_scale" in metric_logger.meters:
-                self.summary_writer.add_scalar(
-                    f"Train/loss_scale",
-                    metric_logger.meters["loss_scale"].global_avg,
-                    epoch,
-                )
-
-            # Optimizer momentum (if present)
-            momentum = self.optimizer.param_groups[0].get("momentum", None)
-            if momentum is not None:
-                self.summary_writer.add_scalar(
-                    f"Train/momentum", float(momentum), epoch
-                )
-
-            # AMP overflow events counted in this epoch
-            if hasattr(self, "_amp_overflow_count"):
-                self.summary_writer.add_scalar(
-                    f"Train/amp_overflow_count", int(self._amp_overflow_count), epoch
-                )
-
-            # Sample BatchNorm running stats from the first BN module found
-            bn_module = None
-            model_ref = (
-                self.model.module
-                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel)
-                else self.model
-            )
-            for m in model_ref.modules():
-                if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-                    bn_module = m
-                    break
-            if (
-                bn_module is not None
-                and hasattr(bn_module, "running_mean")
-                and hasattr(bn_module, "running_var")
-            ):
-                try:
-                    rm = bn_module.running_mean.detach().abs().mean().item()
-                    rv = bn_module.running_var.detach().mean().item()
-                    self.summary_writer.add_scalar(
-                        f"Train/bn0_running_mean_abs", rm, epoch
-                    )
-                    self.summary_writer.add_scalar(f"Train/bn0_running_var", rv, epoch)
-                except Exception:
-                    pass
-
+        # Loss scale (AMP)
+        if self.scaler is not None and "loss_scale" in metric_logger.meters:
             self.summary_writer.add_scalar(
-                f"Train/img_per_second", metric_logger.meters["img/s"].global_avg, epoch
+                f"Train/loss_scale",
+                metric_logger.meters["loss_scale"].global_avg,
+                epoch,
             )
+
+        # Optimizer momentum (if present)
+        momentum = self.optimizer.param_groups[0].get("momentum", None)
+        if momentum is not None:
+            self.summary_writer.add_scalar(
+                f"Train/momentum", float(momentum), epoch
+            )
+
+        # AMP overflow events counted in this epoch
+        if hasattr(self, "_amp_overflow_count"):
+            self.summary_writer.add_scalar(
+                f"Train/amp_overflow_count", int(self._amp_overflow_count), epoch
+            )
+
+        # Sample BatchNorm running stats from the first BN module found
+        bn_module = None
+        model_ref = (
+            self.model.module
+            if isinstance(self.model, torch.nn.parallel.DistributedDataParallel)
+            else self.model
+        )
+        for m in model_ref.modules():
+            if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                bn_module = m
+                break
+        if (
+            bn_module is not None
+            and hasattr(bn_module, "running_mean")
+            and hasattr(bn_module, "running_var")
+        ):
+            try:
+                rm = bn_module.running_mean.detach().abs().mean().item()
+                rv = bn_module.running_var.detach().mean().item()
+                self.summary_writer.add_scalar(
+                    f"Train/bn0_running_mean_abs", rm, epoch
+                )
+                self.summary_writer.add_scalar(f"Train/bn0_running_var", rv, epoch)
+            except Exception:
+                pass
+
+        self.summary_writer.add_scalar(
+            f"Train/img_per_second", metric_logger.meters["img/s"].global_avg, epoch
+        )
 
     def print_after_train(self):
         if hasattr(self, "config_path"):
@@ -1015,6 +1021,7 @@ class Trainer:
                 )
                 f.write(f"final accuracy: {self.final_acc1}\n")
                 f.write(f"max accuracy: {self.max_acc1}\n")
+        """
         if (
             getattr(self, "log_dir", None) is not None
             and getattr(self.args, "config", None) is not None
@@ -1035,3 +1042,4 @@ class Trainer:
                     print(f"[WARN] Config path does not exist: {src}")
             except Exception as e:
                 print(f"[WARN] Failed to copy config to log_dir: {e}")
+        """

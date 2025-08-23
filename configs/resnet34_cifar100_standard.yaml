@@ -1,0 +1,123 @@
+# === CIFAR-100 ResNet34 Configuration ===
+# CIFAR-100: batch_size=128, weight_decay=1e-4, cosine LR with warmup
+# ResNet34 typically needs more regularization for CIFAR-100 due to higher complexity
+
+# ResNet34 CIFAR-100 单节点训练实验配置
+
+# 基础配置模板
+base_config: &base_config
+  # 模型和数据集
+  model: 'resnet34Cifar'
+  dataset: 'cifar100'
+  
+  # 训练参数
+  batch_size: 256
+  lr: 0.001  # AdamW默认学习率
+  weight_decay: 5e-4
+  clip_grad_norm: 5.0
+  workers: 16
+  
+  # 技术设置
+  amp: true
+  device: 'cuda'
+  
+  # 日志和输出
+  print_freq: 100
+  unified_experiment_name: "single_node_rn34_cifar100_experiments"
+
+# 优化器配置
+optimizers:
+  adamw: &adamw_config
+    opt: 'adamw'
+    # adamw 特有参数
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-8
+    amsgrad: false
+    
+  adafisherw: &adafisherw_config
+    opt: 'adafisherw'
+    # AdaFisherW 特有参数
+    beta: 0.9
+    lamb: 1e-3
+    gamma: 0.8
+    tcov: 100
+    
+  adafactor: &adafactor_config
+    opt: 'adafactor'
+    # Adafactor 特有参数和学习率
+    beta2_decay: -0.8
+    eps1: 1e-30
+    eps2: 1e-3
+    d: 1.0
+    weight_decay: 1e-4 
+    
+  adahessian: &adahessian_config
+    opt: 'adahessian'
+    # AdaHessian 特有参数和学习率
+    lr: 0.03
+    beta1: 0.9
+    beta2: 0.999
+    eps: 5e-4
+    hessian_power: 0.5
+    # AdaHessian 不兼容 AMP，需要禁用
+    amp: false
+    
+  shampoo: &shampoo_config
+    opt: 'shampoo'
+    # Shampoo 特有参数
+    shampoo_damping: 1e-5
+    shampoo_preconditioner_upd_interval: 10
+    shampoo_curvature_update_interval: 100
+    shampoo_ema_decay: -1
+    amp: false
+
+# 预条件器配置
+preconditioners:
+  none: &none_precond
+    preconditioner: 'none'
+    
+  kfac: &kfac_precond
+    preconditioner: 'kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
+    
+  diag_kfac: &diag_kfac_precond
+    preconditioner: 'diag_kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
+
+# 实验定义
+experiments:
+  # 实验 
+  - name: "adamw_test"
+    <<: [*base_config, *adamw_config, *none_precond]
+    epochs: 200
+  
+  - name: "kfac_test"
+    <<: [*base_config, *adamw_config, *kfac_precond]
+    epochs: 71
+    
+  - name: "diag_kfac_test"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    epochs: 83
+
+  - name: "adafisherw_test"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 117
+
+  - name: "adafactor_test"
+    <<: [*base_config, *adafactor_config, *none_precond]
+    epochs: 97
+
+  - name: "shampoo_test"
+    <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
+    epochs: 79
+  
+  - name: "adahessian_test"
+    <<: [*base_config, *adahessian_config, *none_precond]
+    epochs: 50

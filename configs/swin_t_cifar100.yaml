@@ -1,19 +1,19 @@
-# === CIFAR-100 CCT Configuration ===
-# CIFAR-100: batch_size=128, weight_decay=1e-4, AdamW optimizer
-# Compact Convolutional Transformer (CCT) configuration
+# === CIFAR-100 Swin-B Configuration ===
+# CIFAR-100: batch_size=64, weight_decay=5e-2, AdamW with warmup
+# Vision Transformer needs careful learning rate scheduling and regularization
 
-# CCT CIFAR-100 单节点训练实验配置
+# Swin-B CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'cct'
+  model: 'swin_t'
   dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
-  lr: 1e-3
-  weight_decay: 1e-4
+  lr: 0.001
+  weight_decay: 0.001
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "single_node_cct_cifar100_experiments"
+  unified_experiment_name: "swin_s_cifar100"
 
 # 优化器配置
 optimizers:
@@ -46,7 +46,7 @@ optimizers:
   adafactor: &adafactor_config
     opt: 'adafactor'
     # Adafactor 特有参数和学习率
-    lr: 0.01
+    lr: 0.003
     beta2_decay: -0.8
     eps1: null
     eps2: 1e-3
@@ -55,11 +55,11 @@ optimizers:
   adahessian: &adahessian_config
     opt: 'adahessian'
     # AdaHessian 特有参数和学习率
-    lr: 0.15
+    lr: 0.02
     beta1: 0.9
     beta2: 0.999
-    eps: 1e-4
-    hessian_power: 1
+    eps: 5e-4
+    hessian_power: 0.5
     # AdaHessian 不兼容 AMP，需要禁用
     amp: false
     
@@ -79,45 +79,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 15
-    kfac_inv_update_steps: 150
-    kfac_damping: 3e-3
-    kfac_kl_clip: 2e-3
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 15
-    kfac_inv_update_steps: 150
-    kfac_damping: 3e-3
-    kfac_kl_clip: 2e-3
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
 
 # 实验定义
 experiments:
   # 实验 
-  # - name: "cct_adamw_test"
-  #   <<: [*base_config, *adamw_config, *none_precond]
-  #   epochs: 200
-
-  # - name: "cct_adafisherw_test"
-  #   <<: [*base_config, *adafisherw_config, *none_precond]
-  #   epochs: 140
-
-  # - name: "cct_adafactor_test"
-  #   <<: [*base_config, *adafactor_config, *none_precond]
-  #   epochs: 120
-
-  # - name: "cct_adahessian_test"
-  #   <<: [*base_config, *adahessian_config, *none_precond]
-  #   epochs: 80
-
-  - name: "cct_shampoo_test"
-    <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 85
-
-  - name: "cct_kfac_test"
+  - name: "adamw_test"
+    <<: [*base_config, *adamw_config, *none_precond]
+    epochs: 200
+  
+  - name: "kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 100
+    epochs: 71
     
-  - name: "cct_diag_kfac_test"
+  - name: "diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 110
+    epochs: 83
+
+  - name: "adafisherw_test"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 117
+
+  - name: "adafactor_test"
+    <<: [*base_config, *adafactor_config, *none_precond]
+    epochs: 97
+
+  - name: "shampoo_test"
+    <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
+    epochs: 79
+  
+  - name: "adahessian_test"
+    <<: [*base_config, *adahessian_config, *none_precond]
+    epochs: 50

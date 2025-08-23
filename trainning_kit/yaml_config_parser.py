@@ -76,7 +76,7 @@ class DefaultConfig:
     ra_magnitude: int = 9
     augmix_severity: int = 3
     random_erase: float = 0.25
-    amp: bool = False
+    amp: bool = True
     
     # Model EMA
     model_ema: bool = False
@@ -117,7 +117,8 @@ class DefaultConfig:
     kfac_colocate_factors: bool = True
     kfac_strategy: str = "comm-opt"
     kfac_grad_worker_fraction: float = 0.25
-    
+    split_num: int = 4
+
     # 统一的优化器参数 (不同优化器会使用不同的默认值)
     beta: float = 0.9          # 用于 AdaFisher, AdaFisherW
     beta1: float = 0.9         # 用于 AdamW, AdaHessian
@@ -216,7 +217,9 @@ class YAMLConfigParser:
         args = argparse.Namespace()
         for key, value in final_config.items():
             setattr(args, key, value)
-            
+
+        if hasattr(args,"unified_experiment_name_suffix") and hasattr(args,"unified_experiment_name"):
+            args.unified_experiment_name = args.unified_experiment_name + f"_{args.unified_experiment_name_suffix}"
         return args
     
     def validate_config(self, args: argparse.Namespace) -> argparse.Namespace:
@@ -275,17 +278,11 @@ def create_minimal_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=str, help="Path to YAML configuration file")
     
     # 允许覆盖的关键参数
-    parser.add_argument("--model", type=str, help="Override model name")
-    parser.add_argument("--dataset", type=str, help="Override dataset name")
-    parser.add_argument("--opt", type=str, help="Override optimizer")
-    parser.add_argument("--preconditioner", type=str, help="Override preconditioner")
-    parser.add_argument("--epochs", type=int, help="Override number of epochs")
-    parser.add_argument("--batch-size", type=int, dest="batch_size", help="Override batch size")
-    parser.add_argument("--lr", type=float, help="Override learning rate")
     parser.add_argument("--timestamp", type=str, help="Override timestamp")
     parser.add_argument("--experiment-name", type=str, dest="experiment_name", help="Override experiment name")
-    parser.add_argument("--amp", action="store_true", help="Enable mixed precision training")
-    parser.add_argument("--test-only", action="store_true", dest="test_only", help="Only test the model")
+    parser.add_argument("--unified-experiment-name", type=str, dest="unified_experiment_name", help="Add suffix to unified experiment name")
+    parser.add_argument("--unified-experiment-name-suffix", type=str, dest="unified_experiment_name_suffix", help="Add suffix to unified experiment name")
+    parser.add_argument("--epochs", type=int, help="Override number of epochs")
     
     return parser
 
@@ -366,3 +363,7 @@ def get_args_from_yaml(config_path: str, cli_overrides: Optional[Dict[str, Any]]
     args = yaml_parser.auto_configure_paths(args)
     
     return args
+
+if __name__ == "__main__":
+    args = merged_args_parser()
+    print(args)

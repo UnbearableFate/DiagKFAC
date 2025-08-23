@@ -1,19 +1,19 @@
-# === CIFAR-100 Swin-B Configuration ===
-# CIFAR-100: batch_size=64, weight_decay=5e-2, AdamW with warmup
-# Vision Transformer needs careful learning rate scheduling and regularization
+# === CIFAR-100 ResNet34 Configuration ===
+# CIFAR-100: batch_size=128, weight_decay=1e-4, cosine LR with warmup
+# ResNet34 typically needs more regularization for CIFAR-100 due to higher complexity
 
-# Swin-B CIFAR-100 单节点训练实验配置
+# ResNet34 CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'swin_b'
+  model: 'resnet50Cifar'
   dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
-  lr: 5e-4
-  weight_decay: 5e-2
+  lr: 0.001  # AdamW默认学习率
+  weight_decay: 5e-4
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "single_node_swin_b_cifar100_experiments"
+  unified_experiment_name: "single_node_resnet34_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -39,27 +39,27 @@ optimizers:
     opt: 'adafisherw'
     # AdaFisherW 特有参数
     beta: 0.9
-    lamb: 3e-3
+    lamb: 1e-3
     gamma: 0.8
     tcov: 100
     
   adafactor: &adafactor_config
     opt: 'adafactor'
     # Adafactor 特有参数和学习率
-    lr: 0.01
     beta2_decay: -0.8
-    eps1: null
+    eps1: 1e-30
     eps2: 1e-3
     d: 1.0
+    weight_decay: 1e-4 
     
   adahessian: &adahessian_config
     opt: 'adahessian'
     # AdaHessian 特有参数和学习率
-    lr: 0.15
+    lr: 0.03
     beta1: 0.9
     beta2: 0.999
-    eps: 1e-4
-    hessian_power: 1
+    eps: 5e-4
+    hessian_power: 0.5
     # AdaHessian 不兼容 AMP，需要禁用
     amp: false
     
@@ -79,45 +79,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 20
-    kfac_inv_update_steps: 200
-    kfac_damping: 5e-3
-    kfac_kl_clip: 3e-3
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 20
-    kfac_inv_update_steps: 200
-    kfac_damping: 5e-3
-    kfac_kl_clip: 3e-3
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
 
 # 实验定义
 experiments:
   # 实验 
-  - name: "swin_b_adamw_test"
+  - name: "resnet34_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 300
-
-  - name: "swin_b_adafisherw_test"
-    <<: [*base_config, *adafisherw_config, *none_precond]
     epochs: 200
 
-  - name: "swin_b_adafactor_test"
+  - name: "resnet34_adafisherw_test"
+    <<: [*base_config, *adafisherw_config, *none_precond]
+    epochs: 125
+
+  - name: "resnet34_adafactor_test"
     <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 180
+    epochs: 107
 
-  - name: "swin_b_adahessian_test"
+  - name: "resnet34_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 120
+    epochs: 50
 
-  - name: "swin_b_shampoo_test"
+  - name: "resnet34_shampoo_test"
     <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 130
+    epochs: 79
 
-  - name: "swin_b_kfac_test"
+  - name: "resnet34_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 150
+    epochs: 71
     
-  - name: "swin_b_diag_kfac_test"
+  - name: "resnet34_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 160
+    epochs: 84

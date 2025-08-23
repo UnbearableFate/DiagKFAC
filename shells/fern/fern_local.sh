@@ -1,8 +1,7 @@
 #!/bin/bash
 current_time=$(date "+%Y%m%d%H%M")
-
-/home/yu/miniconda3/envs/py313/bin/python \
+CUDA_LAUNCH_BLOCKING=1 TORCH_SHOW_CPP_STACKTRACES=1 python \
  main_local.py \
- --config configs/cct_cifar100_single_node.yaml \
- --experiment-name "cct_diag_kfac_test" \
+ --config configs/focalnet_cifar100_single_node.yaml \
+ --experiment-name "focalnet_adamw_test" \
  --timestamp $current_time

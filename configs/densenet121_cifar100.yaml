@@ -1,19 +1,19 @@
-# === CIFAR-100 ResNet34 Configuration ===
-# CIFAR-100: batch_size=128, weight_decay=1e-4, cosine LR with warmup
-# ResNet34 typically needs more regularization for CIFAR-100 due to higher complexity
+# === CIFAR-100 DenseNet161 Configuration ===
+# CIFAR-100: batch_size=64, weight_decay=1e-4, cosine LR
+# DenseNet161 is large, needs smaller batch size and careful regularization
 
-# ResNet34 CIFAR-100 单节点训练实验配置
+# DenseNet161 CIFAR-100 单节点训练实验配置
 
 # 基础配置模板
 base_config: &base_config
   # 模型和数据集
-  model: 'resnet34Cifar'
+  model: 'densenet121Cifar'
   dataset: 'cifar100'
   
   # 训练参数
   batch_size: 256
   lr: 0.001  # AdamW默认学习率
-  weight_decay: 5e-4
+  weight_decay: 1e-4
   clip_grad_norm: 5.0
   workers: 16
   
@@ -23,7 +23,7 @@ base_config: &base_config
   
   # 日志和输出
   print_freq: 100
-  unified_experiment_name: "single_node_resnet34_cifar100_experiments"
+  unified_experiment_name: "densenet121_cifar100_experiments"
 
 # 优化器配置
 optimizers:
@@ -79,45 +79,45 @@ preconditioners:
     
   kfac: &kfac_precond
     preconditioner: 'kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 16
+    kfac_inv_update_steps: 160
+    kfac_damping: 3.5e-3
+    kfac_kl_clip: 2.0e-3
     
   diag_kfac: &diag_kfac_precond
     preconditioner: 'diag_kfac'
-    kfac_factor_update_steps: 12
-    kfac_inv_update_steps: 120
-    kfac_damping: 2.8e-3
-    kfac_kl_clip: 1.8e-3
+    kfac_factor_update_steps: 16
+    kfac_inv_update_steps: 160
+    kfac_damping: 3.5e-3
+    kfac_kl_clip: 2.0e-3
 
 # 实验定义
 experiments:
   # 实验 
-  - name: "resnet34_adamw_test"
+  - name: "densenet161_adamw_test"
     <<: [*base_config, *adamw_config, *none_precond]
-    epochs: 250
+    epochs: 200
 
-  - name: "resnet34_adafisherw_test"
+  - name: "densenet161_adafisherw_test"
     <<: [*base_config, *adafisherw_config, *none_precond]
-    epochs: 150
+    epochs: 111
 
-  - name: "resnet34_adafactor_test"
+  - name: "densenet161_adafactor_test"
     <<: [*base_config, *adafactor_config, *none_precond]
-    epochs: 130
+    epochs: 109
 
-  - name: "resnet34_adahessian_test"
+  - name: "densenet161_adahessian_test"
     <<: [*base_config, *adahessian_config, *none_precond]
-    epochs: 85
+    epochs: 54
 
-  - name: "resnet34_shampoo_test"
+  - name: "densenet161_shampoo_test"
     <<: [*base_config, *shampoo_config, *adamw_config, *none_precond]
-    epochs: 90
+    epochs: 84
 
-  - name: "resnet34_kfac_test"
+  - name: "densenet161_kfac_test"
     <<: [*base_config, *adamw_config, *kfac_precond]
-    epochs: 100
+    epochs: 79
     
-  - name: "resnet34_diag_kfac_test"
+  - name: "densenet161_diag_kfac_test"
     <<: [*base_config, *adamw_config, *diag_kfac_precond]
-    epochs: 110
+    epochs: 89

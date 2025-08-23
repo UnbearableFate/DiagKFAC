@@ -6,6 +6,7 @@ import urllib.request
 import numpy as np
 from asdl.precondition import PreconditioningConfig, ShampooGradientMaker, KfacGradientMaker
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from GPT1 import MiniGPT1
 import torch.nn as nn
@@ -19,11 +20,13 @@ from optimizers.AdaFisher import AdaFisherW
 from optimizers.AdaHessian import Adahessian
 from torch.optim import AdamW
 from kfac.dia_kfac.preconditioner import DiagKFACPreconditioner
+from kfac.preconditioner import KFACPreconditioner
 import torch.distributed as dist
 import logging
 logging.basicConfig(level=logging.NOTSET, format='%(asctime)s - %(levelname)s - %(message)s')
+from torch.utils.tensorboard import SummaryWriter
 
-def train(epoch, model, dataloader, optimizer, args, gm = None, preconditioner = None):
+def train(epoch, model, dataloader, optimizer, args, gm = None, preconditioner = None, scheduler = None):
     model.train()
     losses = []
     total_iters = 0
@@ -52,10 +55,26 @@ def train(epoch, model, dataloader, optimizer, args, gm = None, preconditioner =
         
         if preconditioner is not None:
             preconditioner.step()
+            torch.nn.utils.clip_grad_norm_(model.parameters(),
+                                       args.clip_norm)
+            
+        with torch.no_grad():
+            sq_sum = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    sq_sum += float(p.grad.detach().data.norm(2).item() ** 2)
+            grad_norm_val = math.sqrt(sq_sum) if sq_sum > 0.0 else 0.0
+        
         optimizer.step()
+        
+        # Update learning rate scheduler if provided
+        if scheduler is not None:
+            scheduler.step()
+            
         total_iters += 1
         if idx % args.print_every == 0:
-            tqdm.write(f"[TRAIN] Epoch: {epoch}, Iter : {idx} / {len(dataloader)}, Loss: {loss.item():.5f}")
+            current_lr = optimizer.param_groups[0]['lr'] if scheduler is not None else args.lr
+            tqdm.write(f"[TRAIN] Epoch: {epoch}, Iter : {idx} / {len(dataloader)}, Loss: {loss.item():.5f}, LR: {current_lr:.6f}, Grad Norm: {grad_norm_val:.6f}")
 
     mean_loss = np.mean(losses)
     mean_loss /= args.batch_size * dataloader.dataset.max_length
@@ -126,8 +145,9 @@ def main(args):
 
     # Download the embeddings
     if not os.path.isfile(args.embeddings):
-        print("Downloading embeddings...")
-        urllib.request.urlretrieve(EMBEDDINGS_URL, args.embeddings)
+        raise FileNotFoundError(f"Embeddings file not found: {args.embeddings}")
+        #print("Downloading embeddings...")
+        #urllib.request.urlretrieve(EMBEDDINGS_URL, args.embeddings)
 
     # Model
 
@@ -175,34 +195,76 @@ def main(args):
     else:
         gm = None
 
+    # Initialize learning rate scheduler
+    total_steps = len(train_dataloader) * args.epochs
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr=args.lr*1.5,
+        total_steps=total_steps,
+        pct_start=args.pct_start,
+        anneal_strategy=args.anneal_strategy,
+        div_factor=args.div_factor,
+        final_div_factor=args.final_div_factor,
+        cycle_momentum=False
+    )
+
     if args.preconditioner == "diag_kfac":
         preconditioner = DiagKFACPreconditioner(
             model,
             factor_update_steps=args.curvature_update_interval,
             inv_update_steps=args.preconditioner_upd_interval,
+            damping= 0.0028,
+            kl_clip=0.001,
             split_num=4,
-            epochs=args.epochs
-            )
+            epochs=args.epochs,
+            lr=lambda x: scheduler.get_lr()[0],
+        )
+    elif args.preconditioner == "hd_kfac":
+        preconditioner = KFACPreconditioner(
+            model,
+            factor_update_steps=args.curvature_update_interval,
+            inv_update_steps=args.preconditioner_upd_interval,
+            damping= 0.0028,
+            kl_clip=0.001,
+            lr=lambda x: scheduler.get_lr()[0],
+        )
+    else:
+        preconditioner = None
 
     tot_params = sum(p.numel() for p in model.parameters())
     tot_learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     train_losses, valid_losses = [], []
     train_ppls, valid_ppls = [], []
     train_times, valid_times = [], []
+    total_train_time = 0
+    summary_writer = SummaryWriter(log_dir=os.path.join(args.log_dir, args.exp_id))
     for epoch in range(args.epochs):
 
         tqdm.write(f"====== Epoch {epoch} ======>")
 
-        loss, ppl, wall_time = train(epoch, model, train_dataloader, optimizer, args, gm, preconditioner)
+        loss, ppl, wall_time = train(epoch, model, train_dataloader, optimizer, args, gm, preconditioner, scheduler)
         train_losses.append(loss)
         train_ppls.append(ppl)
         train_times.append(wall_time)
         track_memory_gpu(args, epoch)
+
+        total_train_time += wall_time
+        summary_writer.add_scalar('Train/loss', loss, epoch)
+        
+        # Log current learning rate
+        if scheduler is not None:
+            current_lr = optimizer.param_groups[0]['lr']
+            summary_writer.add_scalar('Train/learning_rate', current_lr, epoch)
         
         loss, ppl, wall_time = evaluate(epoch, model, valid_dataloader, args)
         valid_losses.append(loss)
         valid_ppls.append(ppl)
         valid_times.append(wall_time)
+
+        summary_writer.add_scalar('Valid/loss', loss, epoch)
+        summary_writer.add_scalar('Valid/loss_vs_time', loss, int(total_train_time * 1000))
+        summary_writer.add_scalar('Valid/ppl', ppl, epoch)
+        summary_writer.add_scalar('Valid/ppl_vs_time', ppl, int(total_train_time * 1000))
 
     test_loss, test_ppl, test_time = evaluate(
         epoch, model, test_dataloader, args, mode="test"
@@ -274,7 +336,7 @@ if __name__ == "__main__":
     optimization.add_argument(
         "--preconditioner",
         type=str,
-        default="diag_kfac",
+        default="None",
         choices=["hd_kfac",'diag_kfac'],
         help="choice of preconditioner (default: %(default)s).",
     )
@@ -292,7 +354,7 @@ if __name__ == "__main__":
     )
     optimization.add_argument(
         "--clip_norm",
-        type=int,
+        type=float,
         default=10,
         help="Clip norm for SGD optimizer (default: %(default)s).",
     )
@@ -338,6 +400,33 @@ if __name__ == "__main__":
         default=0.008,
         help="gamma2 parameter (default: %(default)s).",
     )
+    
+    optimization.add_argument(
+        "--pct_start",
+        type=float,
+        default=0.3,
+        help="percentage of cycle spent increasing the learning rate (default: %(default)s).",
+    )
+    optimization.add_argument(
+        "--anneal_strategy",
+        type=str,
+        default="cos",
+        choices=["cos", "linear"],
+        help="annealing strategy for OneCycleLR (default: %(default)s).",
+    )
+    optimization.add_argument(
+        "--div_factor",
+        type=float,
+        default=25.0,
+        help="div_factor for OneCycleLR (default: %(default)s).",
+    )
+    optimization.add_argument(
+        "--final_div_factor",
+        type=float,
+        default=1e4,
+        help="final_div_factor for OneCycleLR (default: %(default)s).",
+    )
+    
     exp = parser.add_argument_group("Experiment config")
     exp.add_argument(
         "--exp_id",
@@ -368,7 +457,7 @@ if __name__ == "__main__":
     misc.add_argument(
         "--num_workers",
         type=int,
-        default=2,
+        default=12,
         help="number of processes to use for data loading (default: %(default)s).",
     )
     misc.add_argument(

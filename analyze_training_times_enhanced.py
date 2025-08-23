@@ -392,7 +392,8 @@ def main():
     recommendations = calculate_recommended_epochs(time_statistics, args.baseline_epochs, args.baseline_optimizer)
     
     # 保存文本结果
-    with open(args.output_txt, 'w', encoding='utf-8') as f:
+    output_txt = os.path.join(args.base_path, args.output_txt)
+    with open(output_txt, 'w', encoding='utf-8') as f:
         f.write("训练时长、内存使用和准确率分析结果\n")
         f.write("=" * 50 + "\n\n")
         

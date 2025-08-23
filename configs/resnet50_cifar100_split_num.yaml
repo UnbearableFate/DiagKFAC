@@ -1,0 +1,74 @@
+# === CIFAR-100 ResNet34 Configuration ===
+# CIFAR-100: batch_size=128, weight_decay=1e-4, cosine LR with warmup
+# ResNet50 typically needs more regularization for CIFAR-100 due to higher complexity
+
+# 基础配置模板
+base_config: &base_config
+  # 模型和数据集
+  model: 'resnet50Cifar'
+  dataset: 'cifar100'
+  
+  # 训练参数
+  batch_size: 256
+  lr: 0.001  # AdamW默认学习率
+  weight_decay: 5e-4
+  clip_grad_norm: 5.0
+  workers: 12
+  
+  # 技术设置
+  amp: true
+  device: 'cuda'
+  
+  # 日志和输出
+  print_freq: 100
+  epochs: 50
+  
+
+# 优化器配置
+optimizers:
+  adamw: &adamw_config
+    opt: 'adamw'
+    # adamw 特有参数
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-8
+    amsgrad: false
+    
+# 预条件器配置
+preconditioners:
+
+  diag_kfac: &diag_kfac_precond
+    preconditioner: 'diag_kfac'
+    kfac_factor_update_steps: 12
+    kfac_inv_update_steps: 120
+    kfac_damping: 2.8e-3
+    kfac_kl_clip: 1.8e-3
+
+# 实验定义
+experiments:
+  # 实验
+
+  - name: "resnet50_diag_kfac_test_split_2"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    unified_experiment_name: "ablation_split_num_2"
+    split_num: 2
+
+  - name: "resnet50_diag_kfac_test_split_4"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    unified_experiment_name: "ablation_split_num_4"
+    split_num: 4
+
+  - name: "resnet50_diag_kfac_test_split_6"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    unified_experiment_name: "ablation_split_num_6"
+    split_num: 6
+
+  - name: "resnet50_diag_kfac_test_split_8"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    unified_experiment_name: "ablation_split_num_8"
+    split_num: 8
+
+  - name: "resnet50_diag_kfac_test_split_10"
+    <<: [*base_config, *adamw_config, *diag_kfac_precond]
+    unified_experiment_name: "ablation_split_num_10"
+    split_num: 10

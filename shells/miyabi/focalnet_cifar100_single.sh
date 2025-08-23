@@ -12,7 +12,7 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 # --- Configuration ---
-CONFIG_FILE="${CONFIG_FILE:-configs/swin_b_cifar100_single_node.yaml}"
+CONFIG_FILE="${CONFIG_FILE:-configs/focalnet_cifar100_single_node.yaml}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-}"  # 如果为空，将运行所有实验
 RUN_MODE="${RUN_MODE:-single}"  # single 或 batch
 

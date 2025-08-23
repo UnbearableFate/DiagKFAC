@@ -3,7 +3,7 @@
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=1:mpiprocs=1
-#PBS -l walltime=04:00:00
+#PBS -l walltime=06:00:00
 #PBS -j oe
 #PBS -m ae
 
@@ -12,7 +12,7 @@ set -eEuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO" >&2' ERR
 
 # --- Configuration ---
-CONFIG_FILE="${CONFIG_FILE:-configs/swin_b_cifar100_single_node.yaml}"
+CONFIG_FILE="${CONFIG_FILE:-configs/densenet121_cifar100_single_node.yaml}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-}"  # 如果为空，将运行所有实验
 RUN_MODE="${RUN_MODE:-single}"  # single 或 batch
 
